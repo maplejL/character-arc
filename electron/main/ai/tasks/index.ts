@@ -9,6 +9,7 @@ import outlineChain from './outline-chain'
 import projectBootstrap from './project-bootstrap'
 import chapterAnalysis from './chapter-analysis'
 import outlineTensionCheck from './outline-tension-check'
+import volumeBatchReview from './volume-batch-review'
 import inspirationPack from './inspiration-pack'
 import assistantIntent from './assistant-intent'
 import assistantActionProposal from './assistant-action-proposal'
@@ -61,6 +62,7 @@ register(outlineChain)
 register(projectBootstrap)
 register(chapterAnalysis)
 register(outlineTensionCheck)
+register(volumeBatchReview)
 register(inspirationPack)
 register(assistantIntent)
 register(assistantActionProposal)

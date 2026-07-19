@@ -75,6 +75,7 @@ export type AiTaskName =
   | 'spiral-validate'
   | 'chapter-analysis'
   | 'outline-tension-check'
+  | 'volume-batch-review'
   | 'chapter-repair'
   | 'chapter-final-polish'
   | 'chapter-session-note'
@@ -383,6 +384,12 @@ export type OutlineTensionCheckResult = {
   risks: string[]
 }
 
+/** 整卷复盘结果：阶段摘要 + 批次级风险 */
+export type VolumeBatchReviewResult = {
+  stageSummary: string
+  risks: string[]
+}
+
 /** 参考小说整体风格分析结果 */
 export type ReferenceStyleAnalysisResult = {
   overview: string
@@ -511,6 +518,7 @@ export type AiTaskResult =
   | WorkflowStageDocumentsResult
   | ChapterAnalysisResult
   | OutlineTensionCheckResult
+  | VolumeBatchReviewResult
   | ReferenceStyleChunkResult
   | ReferenceStyleAnalysisResult
   | InspirationPackResult

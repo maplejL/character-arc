@@ -56,6 +56,7 @@ export type ChapterStreamTaskName =
   | 'chapter-session-note'
   | 'chapter-analysis'
   | 'outline-tension-check'
+  | 'volume-batch-review'
 
 type ConvergenceStreamPhase = 'chapter-quality-review' | 'chapter-audit' | 'chapter-repair'
 

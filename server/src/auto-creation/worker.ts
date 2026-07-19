@@ -725,6 +725,81 @@ async function executeRun(run: AutoCreationRunRead): Promise<void> {
 
     emit(run.userId, run.id, { type: 'run-status', runId: run.id, status: 'completed' })
 
+    // 整卷复盘：对本次 run 完成的章节做一次「阶段摘要 + 批次级 risks」，写入项目知识库。
+    // 在 run 标记完成后执行，失败仅告警，不影响 run 的完成状态。
+    try {
+      const reviewed = completed
+        .map((id) => chapters.find((chapter) => chapter.id === id))
+        .filter((chapter): chapter is ChapterDraft => Boolean(chapter))
+        .slice(-20)
+      if (reviewed.length > 0) {
+        const lastChapterId = reviewed[reviewed.length - 1]!.id
+        emit(run.userId, run.id, { type: 'step-progress', runId: run.id, chapterId: lastChapterId, step: 'volume-review', message: '正在做整卷复盘...' })
+        const batchReviewText = reviewed
+          .map((chapter) => {
+            const plain = (chapter.content ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+            return `《${chapter.title ?? chapter.id}》摘要：${(chapter.summary ?? '').trim() || '无'}\n节选：${plain.slice(0, 300)}`
+          })
+          .join('\n\n')
+        const volumeTitle = (
+          (getProjectWorkspace(workspace, run.projectId) as { outlineVolumes?: Array<{ id: string; title?: string }> })
+            .outlineVolumes ?? []
+        ).find((volume) => volume.id === run.volumeId)?.title ?? ''
+        const reviewStream = await serverStreamTask(
+          run.userId,
+          'volume-batch-review',
+          {
+            projectTitle: project.title,
+            projectGenre: project.genre,
+            chapterVolumeTitle: volumeTitle,
+            batchReviewText,
+          },
+          controller.signal,
+          { autoCreationRunId: run.id, projectId: run.projectId },
+        )
+        const reviewResult = reviewStream.result as { stageSummary?: string; risks?: string[] } | undefined
+        const stageSummary = String(reviewResult?.stageSummary ?? '').trim()
+        const risks = Array.isArray(reviewResult?.risks)
+          ? reviewResult.risks.map((risk) => String(risk).trim()).filter(Boolean).slice(0, 4)
+          : []
+        if (stageSummary) {
+          const now = new Date().toISOString()
+          const reviewDoc = {
+            id: `volume-review-${run.volumeId}-${Date.now()}`,
+            projectId: run.projectId,
+            title: `整卷复盘｜${volumeTitle || run.volumeId}｜${now.slice(0, 10)}`,
+            sourceType: 'chapter-summary',
+            sourceLabel: 'volume-review',
+            content: `阶段摘要：${stageSummary}${risks.length > 0 ? `\n批次级风险：\n${risks.map((risk) => `- ${risk}`).join('\n')}` : ''}`,
+            summary: stageSummary.slice(0, 120),
+            keywords: [volumeTitle || '', 'volume-review'],
+            metadata: {
+              runId: run.id,
+              volumeId: run.volumeId,
+              chapterIds: reviewed.map((chapter) => chapter.id),
+              journalType: 'volume-review',
+              risks,
+            },
+            createdAt: now,
+            updatedAt: now,
+          }
+          workspace = {
+            ...workspace,
+            knowledgeDocuments: [...(Array.isArray(workspace.knowledgeDocuments) ? workspace.knowledgeDocuments : []), reviewDoc],
+          }
+          await writeUserWorkspace(run.userId, workspace)
+          emit(run.userId, run.id, { type: 'step-progress', runId: run.id, chapterId: lastChapterId, step: 'volume-review', message: `整卷复盘已写入（${reviewed.length} 章${risks.length > 0 ? `，${risks.length} 条批次风险` : ''}）` })
+        }
+      }
+    } catch (reviewError) {
+      emit(run.userId, run.id, {
+        type: 'run-warning',
+        runId: run.id,
+        code: 'volume_review_failed',
+        message: reviewError instanceof Error ? reviewError.message : '整卷复盘失败',
+      })
+    }
+
   } catch (error) {
 
     if (controller.signal.aborted) return

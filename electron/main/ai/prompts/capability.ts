@@ -48,6 +48,7 @@ const TASK_DEFAULT_CAPABILITIES: Record<AiTaskName, PromptCapabilityId[]> = {
   'project-bootstrap': ['settings', 'worldview', 'outline', 'characters', 'writing-style'],
   'chapter-analysis': ['settings', 'chapters', 'analysis', 'worldview', 'characters', 'relations', 'outline', 'versioning'],
   'outline-tension-check': ['settings'],
+  'volume-batch-review': ['settings'],
   'inspiration-pack': ['settings', 'inspiration', 'chapters', 'worldview', 'characters', 'relations', 'outline', 'writing-style'],
   'chapter-summarize': ['settings', 'chapters', 'analysis'],
   'chapter-scene-plan': ['settings', 'chapters', 'outline'],
