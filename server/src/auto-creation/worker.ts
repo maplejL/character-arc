@@ -75,6 +75,7 @@ type OutlineItem = {
   sortOrder: number
   status?: string
   summary?: string
+  conflict?: string
   wordTarget?: string
 }
 
@@ -604,6 +605,60 @@ async function executeRun(run: AutoCreationRunRead): Promise<void> {
           } catch {
             // 单章分析失败不阻断批次
           }
+        }
+        // 大纲张力边界核对：对照后续未写大纲节点，检查批次正文是否提前消耗关键节拍。
+        // 单章 risks 看不到这类跨节点问题（如第 3 章暗示了第 5 节点的身世揭晓）。
+        try {
+          const volumeItems = outlineItems
+            .filter((item) => item.volumeId === run.volumeId && !shouldSkipOutlineNodeForAutoCreation(item))
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+          const currentChapter = chapters.find((c) => c.id === chapterId)
+          const frontierItem = currentChapter?.outlineItemId
+            ? volumeItems.find((item) => item.id === currentChapter.outlineItemId)
+            : undefined
+          const upcoming = (frontierItem
+            ? volumeItems.filter((item) => item.sortOrder > frontierItem.sortOrder)
+            : volumeItems.filter(
+                (item) => !chapters.some((c) => c.outlineItemId === item.id && (c.content ?? '').trim().length > 0),
+              )
+          ).slice(0, 5)
+          if (upcoming.length > 0) {
+            const batchText = batch
+              .map((batchChapterId) => {
+                const c = chapters.find((item) => item.id === batchChapterId)
+                if (!c) return ''
+                return `《${c.title ?? batchChapterId}》\n${(c.content ?? '').slice(0, 4000)}`
+              })
+              .filter(Boolean)
+              .join('\n\n---\n\n')
+            const upcomingOutline = upcoming
+              .map(
+                (item, i) =>
+                  `节点${i + 1}「${item.title}」摘要：${(item.summary ?? '').trim() || '无'}${(item.conflict ?? '').trim() ? ` 冲突：${(item.conflict ?? '').trim()}` : ''}`,
+              )
+              .join('\n')
+            const volumeTitle = (
+              (getProjectWorkspace(workspace, run.projectId) as { outlineVolumes?: Array<{ id: string; title?: string }> })
+                .outlineVolumes ?? []
+            ).find((volume) => volume.id === run.volumeId)?.title ?? ''
+            const tensionStream = await serverStreamTask(
+              run.userId,
+              'outline-tension-check',
+              {
+                projectTitle: project.title,
+                projectGenre: project.genre,
+                chapterVolumeTitle: volumeTitle,
+                batchText,
+                upcomingOutline,
+              },
+              controller.signal,
+              { autoCreationRunId: run.id, projectId: run.projectId },
+            )
+            const tensionRisks = (tensionStream.result as { risks?: string[] } | undefined)?.risks ?? []
+            batchRisks.push(...tensionRisks.filter(Boolean).map((r) => `大纲张力: ${r}`))
+          }
+        } catch {
+          // 边界核对失败不阻断批次
         }
         if (batchRisks.length > 0) {
           const riskSummary = batchRisks.slice(0, 5).join('；')

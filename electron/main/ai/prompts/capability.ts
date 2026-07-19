@@ -47,6 +47,7 @@ const TASK_DEFAULT_CAPABILITIES: Record<AiTaskName, PromptCapabilityId[]> = {
   'chapter-first-draft': ['settings', 'chapters', 'worldview', 'characters', 'relations', 'outline', 'inspiration', 'writing-style', 'project-skills', 'versioning'],
   'project-bootstrap': ['settings', 'worldview', 'outline', 'characters', 'writing-style'],
   'chapter-analysis': ['settings', 'chapters', 'analysis', 'worldview', 'characters', 'relations', 'outline', 'versioning'],
+  'outline-tension-check': ['settings'],
   'inspiration-pack': ['settings', 'inspiration', 'chapters', 'worldview', 'characters', 'relations', 'outline', 'writing-style'],
   'chapter-summarize': ['settings', 'chapters', 'analysis'],
   'chapter-scene-plan': ['settings', 'chapters', 'outline'],
