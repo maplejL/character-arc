@@ -80,7 +80,7 @@
 按优先级排序，供下一个 agent 参考：
 
 1. ~~**"从某一章手动重跑"的 UI/接口**~~ ✅（2026-07-19 完成）：API 已支持 `startFromIndex` / `startFromChapterId`（`server/src/routes/auto-creation.ts`）；UI 在 `AutoCreationConfigDialog` 新增「起始章节」选择，经 `useAutoCreationRunner.startVolumeAutoCreation(volumeId, config, options)` 透传，web/server 与本地模式均生效。注意：内容已合格的章仍会被 acceptance-check 跳过，重跑失败章无需额外清理。
-2. **批次间的大纲张力检查**：跨章一致性检查只看单章 risks，没对照后续大纲节点看"是否提前消耗关键节拍"。
+2. ~~**批次间的大纲张力检查**~~ ✅（2026-07-19 完成）：新增 `outline-tension-check` 任务（`electron/main/ai/tasks/outline-tension-check.ts`），worker 在 `consistencyCheckInterval` 批次检查中追加一次边界核对——对照当前进度之后至多 5 个未写大纲节点（标题+摘要+冲突），检查批次正文是否提前消耗关键节拍（身世/底牌提前揭晓、反转泄底、关系越级、冲突提前解决），只报高置信问题；命中以「大纲张力」前缀并入批次 risks，走既有暂停 + run-warning 流程；核对失败不阻断批次。
 3. **写作日志结构化聚合**：把 audit/repair 的 issue 按 category 聚合进 `knowledgeDocuments`，memo 生成时把"高频坑"作为硬约束前置。
 4. **批次结束时的整卷复盘**：run 完成后对整批章节做一次"阶段摘要 + 批次级 risks"，写进项目 memory。
 5. **失败章隔离区**：失败章内容已写进 workspace，可能污染后续章的 `relatedChapters` / `volumeChapterSummaries`，建议 `status: 'quarantine'` 并在 `buildMemoBaseContext` 里排除。
