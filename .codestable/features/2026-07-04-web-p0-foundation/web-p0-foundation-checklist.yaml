@@ -1,0 +1,45 @@
+feature: 2026-07-04-web-p0-foundation
+design: web-p0-foundation-design.md
+status: accepted
+
+steps:
+  - id: server-scaffold
+    title: Fastify 服务骨架与健康检查
+    status: done
+    exit_signal: GET /health 返回 200
+
+  - id: db-migrate
+    title: PostgreSQL 迁移（users/invite/BYOK/logs）
+    status: done
+    exit_signal: pnpm --dir server migrate 成功
+
+  - id: auth-api
+    title: 注册/登录/刷新/me + 邀请码校验
+    status: done
+    exit_signal: 无邀请码注册 403；有效码注册成功
+
+  - id: byok-api
+    title: BYOK CRUD + DeepSeek/OpenAI-compatible 测试连接
+    status: done
+    exit_signal: test 返回 latencyMs
+
+  - id: admin-invite
+    title: Admin 邀请码创建与列表
+    status: done
+    exit_signal: Admin POST invite-codes 返回 code
+
+  - id: web-spa
+    title: 最小 Vue SPA 登录注册与 AI 配置页
+    status: done
+    exit_signal: 浏览器完成注册登录并保存 Key
+
+  - id: deploy-snippets
+    title: nginx 片段与 deploy 脚本骨架
+    status: done
+    exit_signal: tools/nginx-character-arc.conf 存在
+
+checks:
+  - 无公开注册（必须 inviteCode）
+  - apiKey 响应 never 含明文
+  - 401 格式 { code, message }
+  - P0 不含工作区/SSE/Worker

@@ -248,7 +248,7 @@ export async function fetchModelsForCredentials(
       model: 'deepseek-chat',
       baseUrl: ctx.baseUrl,
       apiKey: ctx.apiKey,
-    }),
+    } as Parameters<typeof normalizeSettings>[0]),
   )
   return {
     models,

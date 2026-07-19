@@ -9,6 +9,7 @@ import { evaluateDraftPreflight, evaluateDeterministicHardRules } from './prefli
 import { resolveQualityConfig, resolveMaxRepairRounds } from './types.js'
 import type {
   AutoCreationQualityConfig,
+  ChapterAuditPayload,
   ChapterProductionContext,
   QualityCheckResult,
   QualityIssue,
@@ -31,11 +32,7 @@ export type ChapterQualityReviewPayload = {
   }>
 }
 
-export type ChapterAuditPayload = {
-  pass: boolean
-  issues: QualityIssue[]
-  wordCount?: number
-}
+export type { ChapterAuditPayload } from './types.js'
 
 export type ConvergenceStreamTaskName = 'chapter-quality-review' | 'chapter-audit' | 'chapter-repair'
 

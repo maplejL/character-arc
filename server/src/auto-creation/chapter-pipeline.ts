@@ -268,7 +268,7 @@ async function serverStreamConvergencePhase(
     const generation = await prepared.runWithWorkspaceDb(prepared.db, () =>
       streamChapterConvergencePhase(
         settings,
-        session,
+        session as unknown as import('../../../electron/shared/auto-creation/convergence-session.js').ChapterConvergenceSession,
         phase,
         userTurn,
         { onTextDelta: () => {} },
@@ -282,7 +282,7 @@ async function serverStreamConvergencePhase(
         ...(logContext ?? {}),
         draftText: String(logContext?.draftText ?? ''),
       },
-    } as import('../../../../electron/main/ai/tasks/base.js').PromptBuildInput
+    } as unknown as import('../../../electron/main/ai/tasks/base.js').PromptBuildInput
     return normalizeConvergencePhaseResult(phase, generation.text, undefined, promptInput)
   } finally {
     try {

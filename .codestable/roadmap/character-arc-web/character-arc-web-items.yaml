@@ -1,0 +1,83 @@
+roadmap: character-arc-web
+created: 2026-07-04
+
+items:
+  - slug: web-p0-foundation
+    description: Node API 骨架、PG 用户/邀请/BYOK、JWT、最小 Web SPA 登录、nginx 片段
+    depends_on: []
+    status: done
+    feature: 2026-07-04-web-p0-foundation
+    minimal_loop: true
+    notes: 最小闭环——邀请注册、登录、BYOK 配置与测试连接
+
+  - slug: web-workspace-api
+    description: 工作区 REST API，SQLite schema 迁 PG 并加 user_id 隔离
+    depends_on: [web-p0-foundation]
+    status: done
+    feature: 2026-07-04-web-workspace-api
+    minimal_loop: true
+    notes: 每用户 JSON workspace + PG user_app_settings；GET/PUT workspace、projects CRUD、首页作品列表
+
+  - slug: web-renderer-migration
+    description: renderer IPC 替换为 HTTP 客户端，Vite base /character-arc/
+    depends_on: [web-workspace-api]
+    status: done
+    feature: 2026-07-04-web-renderer-migration
+    minimal_loop: true
+    notes: window.characterArc HTTP shim、/studio/:id 挂载 renderer、studio-open E2E
+
+  - slug: web-ai-pipeline-port
+    description: electron/main/ai 迁入 server/src/ai，BYOK Provider 注入
+    depends_on: [web-p0-foundation, web-workspace-api]
+    status: done
+    feature: 2026-07-04-web-ai-pipeline-port
+    minimal_loop: true
+    notes: POST /ai/generate + BYOK 注入 + electron AI runtime 复用 + ai-pipeline E2E
+
+  - slug: web-ai-sse-streaming
+    description: SSE 流式 AI 端点，TipTap 与助手 UI 接入
+    depends_on: [web-ai-pipeline-port]
+    status: done
+    feature: 2026-07-04-web-ai-sse-streaming
+    minimal_loop: true
+    notes: POST stream/start + GET stream/events SSE + characterArcClient startAiStream
+
+  - slug: web-auto-creation-worker
+    description: auto_creation_jobs + Worker + WebSocket 进度，后台批跑
+    depends_on: [web-ai-sse-streaming, web-workspace-api]
+    status: done
+    feature: 2026-07-04-web-auto-creation-worker
+    minimal_loop: true
+    notes: auto_creation_runs 表 + in-process worker + WS subscribe + POST runs E2E
+
+  - slug: web-file-uploads
+    description: 服务器磁盘 multipart 上传（封面、参考小说、Skill 包）
+    depends_on: [web-workspace-api]
+    status: done
+    feature: 2026-07-04-web-file-uploads
+    minimal_loop: true
+    notes: user_files 表 + POST files/upload + GET files/:id + file-upload E2E
+
+  - slug: web-project-import
+    description: .carc 一次性导入 API 与 CLI 工具
+    depends_on: [web-workspace-api]
+    status: done
+    feature: 2026-07-04-web-project-import
+    minimal_loop: true
+    notes: POST /projects/import + HomeView 导入 UI + project-import E2E
+
+  - slug: web-remaining-modules
+    description: 封面、拆书、Skills、全局助手等剩余 IPC 面 HTTP 化
+    depends_on: [web-ai-sse-streaming, web-file-uploads]
+    status: done
+    feature: 2026-07-04-web-remaining-modules
+    minimal_loop: true
+    notes: skills/chapter/ref-novel API + characterArcClient 接线 + remaining-modules E2E
+
+  - slug: web-e2e-deploy
+    description: Playwright 冒烟与 deploy-character-arc.ps1 生产发布
+    depends_on: [web-remaining-modules, web-auto-creation-worker]
+    status: done
+    feature: 2026-07-04-web-e2e-deploy
+    minimal_loop: true
+    notes: pnpm test:e2e 12 passed + deploy.ps1 远程 health + startup tsx 重启

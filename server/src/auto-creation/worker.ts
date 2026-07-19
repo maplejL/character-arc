@@ -22,7 +22,7 @@ import { commitChapterEditJson } from '../workspace/chapter-json.js'
 
 import { evaluateChapterAcceptanceSync } from './pipeline-helpers.js'
 import { getTargetOutlineQueueLength } from './queue-limit.js'
-import { relinkOrphanedWritingJournals, syncOutlineItemStatus } from './shared/index.js'
+import { relinkOrphanedWritingJournals, syncOutlineItemStatus, type KnowledgeDocLike } from './shared/index.js'
 
 import { runServerChapterProductionPipeline, serverStreamTask } from './chapter-pipeline.js'
 
@@ -273,7 +273,7 @@ async function executeRun(run: AutoCreationRunRead): Promise<void> {
 
     const outlineItems = (Array.isArray(ws.outlineItems) ? ws.outlineItems : []) as OutlineItem[]
 
-    const knowledgeDocuments = Array.isArray(workspace.knowledgeDocuments) ? [...workspace.knowledgeDocuments] : []
+    const knowledgeDocuments = Array.isArray(workspace.knowledgeDocuments) ? [...workspace.knowledgeDocuments] as KnowledgeDocLike[] : []
 
     const initialRelink = relinkOrphanedWritingJournals(
       knowledgeDocuments,
@@ -485,7 +485,7 @@ async function executeRun(run: AutoCreationRunRead): Promise<void> {
 
 
       const oldContent = String(chapter.content ?? '')
-      const newContent = result.finalContent ?? chapter.content
+      const newContent = String(result.finalContent ?? chapter.content ?? '')
 
       // 版本快照：把旧正文存入 chapterVersions，自动创作可追溯/可回滚。
       // 用独立 JSON 事务提交，避免与下方批量写 workspace 冲突。

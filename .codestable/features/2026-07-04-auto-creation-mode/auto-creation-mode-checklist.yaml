@@ -1,0 +1,72 @@
+feature: 2026-07-04-auto-creation-mode
+created: 2026-07-04
+
+steps:
+  - action: "微重构：从 useChapterFirstDraft 抽出 ChapterProductionPipeline，单章手动初稿行为不变"
+    exit_signal: "vue-tsc 通过；手动点一次「生成初稿」结果与重构前一致"
+    status: pending
+
+  - action: "编排骨架：AutoCreationRun 类型 + buildVolumeChapterQueue + Runner 状态机 + localStorage 持久化"
+    exit_signal: "可 start/pause/resume；队列顺序正确；stub Pipeline 能跑完空卷"
+    status: done
+
+  - action: "计算节点：Pipeline 增强（上章 advice 注入、全量 audit repair 循环、FinalGate、session-note）"
+    exit_signal: "单章 Pipeline 集成测试或手动脚本跑通一章完整链路"
+    status: done
+
+  - action: "Runner 接通：串行调真实 Pipeline，实现 skip / pause / continue / 卷完成"
+    exit_signal: "样例分卷 2–3 章自动跑通；失败场景可暂停并续跑"
+    status: done
+
+  - action: "UI：OutlinePanel 入口 + 配置弹窗 + 进度与暂停/继续/停止 + 卷末 review 通知"
+    exit_signal: "大纲面板可触发全流程；进度文案可见；卷完成有通知"
+    status: pending
+
+  - action: "验收：对照 design §3 关键场景清单逐项核对"
+    exit_signal: "8 条验收场景均有可观察证据或记录"
+    status: pending
+
+checks:
+  - item: "AutoCreationRun / AutoCreationConfig / ChapterPipelineResult 类型与 design §2.1 一致"
+    source: 名词契约
+    status: pending
+
+  - item: "分卷内按章节顺序串行；不跨卷、不并行"
+    source: 编排骨架
+    status: pending
+
+  - item: "有正文且验收全过才 skip；有正文未验收走质检链路"
+    source: 编排骨架
+    status: pending
+
+  - item: "已有正文但未验收时不从零重写初稿"
+    source: 流程级约束
+    status: pending
+
+  - item: "审计不通过时 repair 输入全部 issues（非仅 critical）"
+    source: 编排骨架
+    status: pending
+
+  - item: "终检三项（字数、去 AI、自然度）通过后才 session-note 并下一章"
+    source: 编排骨架
+    status: pending
+
+  - item: "API 失败暂停并记录断点，可继续"
+    source: 流程级约束
+    status: pending
+
+  - item: "OutlinePanel 自动创作按钮存在且仅作用于当前分卷"
+    source: 挂载点
+    status: pending
+
+  - item: "不自动生成/修改大纲结构"
+    source: 范围守护
+    status: pending
+
+  - item: "不跨分卷、不并行、不默认覆盖正文、不自动 final"
+    source: 范围守护
+    status: pending
+
+  - item: "验收场景 1–8（design §3）"
+    source: 验收场景
+    status: pending

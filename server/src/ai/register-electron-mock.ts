@@ -51,8 +51,10 @@ export function registerElectronMock(): void {
 
   process.env.CHARACTERARC_APP_ROOT = appRoot()
 
-  const originalResolve = Module._resolveFilename
-  Module._resolveFilename = function patchedResolve(
+  type ResolveFilename = (request: string, parent: NodeModule, isMain: boolean, options?: unknown) => string
+  const moduleWithResolve = Module as unknown as { _resolveFilename: ResolveFilename }
+  const originalResolve = moduleWithResolve._resolveFilename
+  moduleWithResolve._resolveFilename = function patchedResolve(
     request: string,
     parent: NodeModule,
     isMain: boolean,

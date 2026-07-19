@@ -1,0 +1,43 @@
+feature: 2026-07-17-continuation-reverse-extract
+created: 2026-07-17
+scope_note: Web + server only. 用户拍板：默认不勾选；完整关系网；弧线大纲≤30；完整世界观。
+
+steps:
+  - action: "采样纯函数 + 结果类型（reverse-sample）"
+    exit_signal: "千章 mock 得到稳定 body 子集与 titleIndex"
+    status: done
+  - action: "AI task continuation-reverse-extract 注册 + schema + capability"
+    exit_signal: "任务可被 getTaskHandler 命中，JSON schema 完整"
+    status: done
+  - action: "Server apply + reverse-extract API 写入 workspace"
+    exit_signal: "smoke：角色/关系/世界观/大纲写入且保留续写占位"
+    status: done
+  - action: "Web 向导可选 + Studio query + 工作台横幅按钮"
+    exit_signal: "默认不勾选；横幅可触发 reverseExtractContinuation"
+    status: done
+  - action: "联调真实 AI（可选，部署后）"
+    exit_signal: "对已导入项目点反推设定得到非空角色与大纲"
+    status: pending
+
+checks:
+  - item: "采样计划限制正文章数，标题索引可覆盖全书"
+    source: 名词契约
+    status: done
+  - item: "反推结果含 characters / relationships / worldview / outline"
+    source: 名词契约
+    status: done
+  - item: "rebuild 后保留「续写（待写）」占位"
+    source: 编排骨架
+    status: done
+  - item: "API POST .../continuation/reverse-extract"
+    source: 挂载点
+    status: done
+  - item: "向导默认不勾选反推"
+    source: 范围守护
+    status: done
+  - item: "不做与 state-backfill 强制合并"
+    source: 范围守护
+    status: done
+  - item: "不发明强制未来百章细纲"
+    source: 范围守护
+    status: done

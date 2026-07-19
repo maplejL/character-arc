@@ -4,12 +4,15 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "dist",
-    "rootDir": "src",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "declaration": true
+    "declaration": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../electron/shared/*", "../electron/shared/*.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

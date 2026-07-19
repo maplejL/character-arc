@@ -376,7 +376,7 @@ export async function parityRoutes(app: FastifyInstance): Promise<void> {
 
     const bookControllers = new Map<string, AbortController>()
     batchBookControllers.set(user.sub, bookControllers)
-    const results = []
+    const results: Array<Record<string, unknown>> = []
     const concurrency = Math.max(1, Math.min(8, Math.floor(Number(meta.concurrency ?? 3))))
 
     try {

@@ -6,7 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "start:once": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "migrate": "tsx src/db/migrate.ts",
     "test:p0": "tsx scripts/p0-api-e2e.ts",
     "test:workspace": "tsx scripts/workspace-api-e2e.ts",

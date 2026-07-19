@@ -1,0 +1,82 @@
+feature: 2026-07-17-novel-continuation
+created: 2026-07-17
+scope_note: "用户确认仅 Web 端实现（web + server API + shared continuation）；不新增 Electron 桌面向导"
+
+steps:
+  - action: "解析纯函数：实现文件/文件夹/整本切章，产出 ManuscriptParseResult"
+    exit_signal: "给定样例源（多文件 + 单本第N章分隔）得到稳定 ParsedChapterCandidate[]，0 可读章有明确 warnings"
+    status: done
+  - action: "ContinuationSeed + 断点持久化：预览确认列表写入新项目章节与 ContinuationBreakpoint"
+    exit_signal: "手工导入 3 章样例后工作台能打开并见正文，断点 completedThroughIndex 正确"
+    status: done
+  - action: "向导 UI 四步：源选择 → 预览改标题/删章/残稿 → 元数据 → 创建/可选补录"
+    exit_signal: "Web 走通一次完整导入，Home 入口与 /continuation 路由可用"
+    status: done
+  - action: "串联状态补录：向导可选步骤 + 工作台续写条可重试，复用 backfill API"
+    exit_signal: "补录可触发；失败保留正文并可在项目知识库重试"
+    status: done
+  - action: "续写执行：断点条引导 + 自动创作队列从断点后起跑，不 full 覆盖已导入正文"
+    exit_signal: "已导入章带 writing-journal 验收；续写占位 outline 3章；startFromIndex/startFromChapterId 可用"
+    status: done
+  - action: "验收收尾：对照 design 第 3 节场景与反向核对，文案区分「作品续写」与章节助手「续写」"
+    exit_signal: "验收场景可勾选；无拆书入口混用、无强制 spiral 覆盖导入正文"
+    status: done
+
+checks:
+  - item: "ManuscriptParseResult / ParsedChapterCandidate 契约可用：files|folder|single-book → chapters + warnings"
+    source: 名词契约
+    status: done
+  - item: "ContinuationSeedInput → 新项目含正文章节 + 默认卷/占位大纲 + ContinuationBreakpoint"
+    source: 名词契约
+    status: done
+  - item: "ContinuationBreakpoint 含 completedThroughIndex / lastCompletedChapterId / nextChapterId / lastChapterPartial"
+    source: 名词契约
+    status: done
+  - item: "主流程：选源 → 解析 → 预览 → 元数据 → 建项目 → 可选补录 → 断点 → 工作台续写条"
+    source: 编排骨架
+    status: done
+  - item: "写下一章走 ChapterProductionPipeline full；自动创作复用 AutoCreationRun 且队列从断点后起"
+    source: 编排骨架
+    status: done
+  - item: "解析失败不建项目；建项目后补录失败保留正文并可重试"
+    source: 流程级约束
+    status: done
+  - item: "有正文导入章不得被自动创作 full 初稿路径默认整章覆盖（与 skip/quality-only 语义对齐）"
+    source: 流程级约束
+    status: done
+  - item: "挂载点：ContinuationWizard 路由入口（Web /continuation）"
+    source: 挂载点
+    status: done
+  - item: "挂载点：WorkbenchContinuationBanner（有断点才显示）"
+    source: 挂载点
+    status: done
+  - item: "挂载点：Web 多文件上传读文本 + server parse/seed"
+    source: 挂载点
+    status: done
+  - item: "挂载点：ContinuationBreakpoint 持久化（knowledgeDocuments）"
+    source: 挂载点
+    status: done
+  - item: "挂载点：自动创作启动支持队列起点 fromIndex/startChapterId"
+    source: 挂载点
+    status: done
+  - item: "不做 chat「继续写下一章」自然语言任务路由"
+    source: 范围守护
+    status: done
+  - item: "不做从正文 AI 反推完整大纲/人物卡/世界观（MVP）"
+    source: 范围守护
+    status: done
+  - item: "不做 epub/pdf 与站点抓取"
+    source: 范围守护
+    status: done
+  - item: "不把拆书库「导入小说」改成续写入口"
+    source: 范围守护
+    status: done
+  - item: "不改章节助手 mode=continue 的段级续写语义"
+    source: 范围守护
+    status: done
+  - item: "N1：3 个 txt 导入 → 新项目 3 章 + 断点=3"
+    source: 验收场景
+    status: pending
+  - item: "N2：单文件「第1章/第2章」切分为 2 章可改标题入库"
+    source: 验收场景
+    status: pending

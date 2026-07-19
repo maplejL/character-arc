@@ -16,7 +16,7 @@ export async function exportCarcBuffer(workspace: WorkspacePayload, projectId: s
     (doc) => (doc as { projectId?: string }).projectId === projectId || !(doc as { projectId?: string }).projectId,
   )
   const referenceWorks = (workspace.referenceWorks ?? []).filter((work) =>
-    (project.selectedReferenceWorkIds ?? []).includes(work.id),
+    (project.selectedReferenceWorkIds ?? []).includes((work as { id: string }).id),
   )
 
   const assistantV2 = (ws as { assistantV2?: Record<string, unknown> }).assistantV2 ?? {
