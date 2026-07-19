@@ -192,7 +192,7 @@ function runModelOverridesFromConfig(config: AutoCreationConfig): ChapterProduct
   })
 }
 
-async function serverStreamTask(
+export async function serverStreamTask(
   userId: string,
   task: ChapterStreamTaskName,
   context: Record<string, unknown>,
