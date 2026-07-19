@@ -26,6 +26,25 @@ function formatWritingJournals(journals: unknown): string {
   return `\n\n近期写作日志（参考前几章的经验）：\n${entries.join('\n')}`
 }
 
+function formatQualityPitfalls(pitfalls: unknown): string {
+  if (!Array.isArray(pitfalls) || pitfalls.length === 0) return ''
+  const entries = pitfalls
+    .map((p) => {
+      if (!p || typeof p !== 'object') return ''
+      const item = p as Record<string, unknown>
+      const count = Number(item.count ?? 0)
+      if (!String(item.category ?? '').trim() || !(count > 0)) return ''
+      const samples = Array.isArray(item.samples)
+        ? item.samples.map((s) => String(s).trim()).filter(Boolean).slice(0, 2)
+        : []
+      const sampleText = samples.length > 0 ? `（例：${samples.join('；')}）` : ''
+      return `- 【${String(item.category).trim()}】反复出现 ${count} 次${sampleText}`
+    })
+    .filter(Boolean)
+  if (entries.length === 0) return ''
+  return `\n\n近期高频坑（前几章审查/修复反复发现的问题，本章必须规避，与本章相关的条目务必写进 doNotDo）：\n${entries.join('\n')}`
+}
+
 const handler: TaskHandler = {
   name: 'chapter-memo',
   outputType: 'json',
@@ -69,7 +88,7 @@ ${formatCharacters(context.characters) || '暂无'}
 ${formatCharacterRelationships(context.characterRelationships, context.characters) || '暂无'}
 
 相关大纲：
-${formatOutlineItems(context.outlineItems) || '暂无'}${formatWritingJournals(context.recentWritingJournals)}
+${formatOutlineItems(context.outlineItems) || '暂无'}${formatWritingJournals(context.recentWritingJournals)}${formatQualityPitfalls(context.qualityPitfalls)}
 
 返回格式：{"memo":{"currentTask":"","readerExpectation":"","payoffs":[],"holds":[],"transitionFunctions":"","decisionChecks":[],"endingChanges":[],"doNotDo":[],"emotionArc":"","partScopedTask":"","mustDifferentiateFrom":[],"requiredStake":""}}`
 
@@ -92,7 +111,7 @@ ${formatOutlineItems(context.outlineItems) || '暂无'}${formatWritingJournals(c
 - transitionFunctions：非冲突段落各自承担什么功能（1-3 句）
 - decisionChecks：本章关键人物选择必须过的检查问题（数组，2-3 条）
 - endingChanges：章尾必须发生的具体改变（数组，1-3 条，类型必须是 信息变化/关系变化/物理变化/权力变化 之一）
-- doNotDo：本章红线（数组，2-5 条具体禁忌，**必填且不得为空**，不要写"避免 AI 味"这种泛泛的）。必须包含：①禁止写穿后续大纲节点的具体情节；②主要角色禁止的 OOC 行为；③关系/立场上禁止的越级变化；若偏技术/旁白可再加对白占比与句长约束。空 doNotDo 等于把全局约束从写作契约里删掉，下游审查与修复会失去具体红线。
+- doNotDo：本章红线（数组，2-5 条具体禁忌，**必填且不得为空**，不要写"避免 AI 味"这种泛泛的）。必须包含：①禁止写穿后续大纲节点的具体情节；②主要角色禁止的 OOC 行为；③关系/立场上禁止的越级变化；④「近期高频坑」中与本章相关的反复问题（如有）；若偏技术/旁白可再加对白占比与句长约束。空 doNotDo 等于把全局约束从写作契约里删掉，下游审查与修复会失去具体红线。
 - emotionArc：本章情绪轨迹（1 句话，格式"起点情绪→转折→终点情绪"，如"安逸→被突袭打碎→自我怀疑"）
 - partScopedTask：若同一大纲拆成多章，本章（当前部分）独占要完成的一件事（动词开头，1 句）；非拆章可留空
 - mustDifferentiateFrom：相对前置同纲章或上一章，本章必须在场景/冲突点上不同的 1-2 条（数组）；无可区分压力时可留空

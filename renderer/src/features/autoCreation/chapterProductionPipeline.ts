@@ -11,7 +11,7 @@ import {
 import { buildProjectWritingStyleContext } from '@/features/writingStyles/presets'
 import { normalizeChapterMemo, normalizeDraftForAutoCreation, fitDraftToWordBounds } from '@/features/autoCreation/finalGate'
 import { runConvergenceLoop } from '@/features/autoCreation/convergenceLoop'
-import { buildChapterProductionContext, buildDraftGuardsBlock, resolveMaxRepairRounds, resolveQualityConfig } from '@shared/auto-creation/index'
+import { buildChapterProductionContext, buildDraftGuardsBlock, resolveMaxRepairRounds, resolveQualityConfig, aggregateQualityPitfalls, buildQualityIssueJournal } from '@shared/auto-creation/index'
 import { pickPolishHints } from '@shared/auto-creation/convergence'
 import { loadPreviousChapterAdvice } from '@/features/autoCreation/advice'
 import type { AutoCreationConfig, ChapterPipelineMode, ChapterPipelineProgress, ChapterPipelineResult } from '@/features/autoCreation/types'
@@ -220,6 +220,7 @@ function buildMemoBaseContext(input: {
       title: journal.title,
       content: journal.content
     })),
+    qualityPitfalls: aggregateQualityPitfalls(workspace.knowledgeDocuments),
     previousChapterAdvice: previousChapterAdvice?.trim() || undefined
   }
 }
@@ -438,6 +439,14 @@ export async function runChapterProductionPipeline(
       }
     }
     if (!gateResult.finalGatePass) {
+      // 终检未过的章把本轮质量坑落库，供后续章 memo 聚合「高频坑」
+      const issueJournal = buildQualityIssueJournal({
+        projectId: input.workspace.project.id,
+        chapter,
+        issues: gateResult.qualityIssues ?? [],
+        finalGatePass: false,
+      })
+      if (issueJournal) input.mergeKnowledgeDocuments([issueJournal as KnowledgeDocument])
       return {
         ok: true,
         mode,
@@ -543,6 +552,15 @@ export async function runChapterProductionPipeline(
         label: '下章建议写入失败，本章未记为验收通过',
       })
     }
+
+    // 本章质量坑（审查/修复发现的 issue）按 category 落库，供后续章 memo 聚合「高频坑」
+    const issueJournal = buildQualityIssueJournal({
+      projectId: input.workspace.project.id,
+      chapter,
+      issues: gateResult.qualityIssues ?? [],
+      finalGatePass: true,
+    })
+    if (issueJournal) input.mergeKnowledgeDocuments([issueJournal as KnowledgeDocument])
 
     input.onProgress?.({
       step: 'persist',

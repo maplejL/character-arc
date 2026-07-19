@@ -34,6 +34,7 @@ import {
   buildDraftGuardsBlock,
   resolveMaxRepairRounds,
 } from './shared/index.js'
+import { aggregateQualityPitfalls, buildQualityIssueJournal } from './shared/quality-pitfalls.js'
 import { ChapterConvergenceSession } from './shared/convergence-session.js'
 import {
   CHAPTER_PRODUCTION_UNIFIED_SYSTEM,
@@ -430,6 +431,7 @@ function buildMemoBaseContext(input: {
       .filter((document) => document.sourceLabel === 'writing-journal')
       .slice(0, 3)
       .map((journal) => ({ title: journal.title, content: journal.content })),
+    qualityPitfalls: aggregateQualityPitfalls(knowledgeDocuments),
     previousChapterAdvice: input.previousChapterAdvice?.trim() || undefined,
   }
 }
@@ -826,6 +828,13 @@ export async function runServerChapterProductionPipeline(input: {
     }
     if (!gateResult.finalGatePass) {
       input.onProgress?.({ step: 'persist', label: '终检未完全通过，保存草稿并继续...' })
+      // 终检未过的章把本轮质量坑落库，供后续章 memo 聚合「高频坑」
+      const issueJournal = buildQualityIssueJournal({
+        projectId: input.projectId,
+        chapter,
+        issues: gateResult.qualityIssues ?? [],
+        finalGatePass: false,
+      })
       return {
         ok: true,
         mode,
@@ -833,6 +842,7 @@ export async function runServerChapterProductionPipeline(input: {
         auditPass: true,
         finalGatePass: false,
         acceptanceRecorded: false,
+        knowledgeDocuments: issueJournal ? [issueJournal] : [],
       }
     }
 
@@ -892,6 +902,15 @@ export async function runServerChapterProductionPipeline(input: {
         label: '下章建议写入失败，本章未记为验收通过',
       })
     }
+
+    // 本章质量坑（审查/修复发现的 issue）按 category 落库，供后续章 memo 聚合「高频坑」
+    const issueJournal = buildQualityIssueJournal({
+      projectId: input.projectId,
+      chapter,
+      issues: gateResult.qualityIssues ?? [],
+      finalGatePass: true,
+    })
+    if (issueJournal) newKnowledgeDocuments.push(issueJournal)
 
     const acceptanceRecorded = Boolean(sessionJournal)
     input.onProgress?.({
