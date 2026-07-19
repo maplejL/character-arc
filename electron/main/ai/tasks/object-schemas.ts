@@ -169,6 +169,13 @@ const taskObjectSchemas: Partial<Record<AiTaskName, z.ZodTypeAny>> = {
     risks: stringList,
     revisionActions: stringList
   }),
+  'outline-tension-check': z.object({
+    risks: stringList
+  }),
+  'volume-batch-review': z.object({
+    stageSummary: stringField,
+    risks: stringList
+  }),
   'worldview-entry': worldviewEntrySchema,
   'character-card': z.object({
     name: stringField,

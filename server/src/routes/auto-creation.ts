@@ -41,6 +41,8 @@ const createRunSchema = z.object({
       draftProfileId: z.string().min(1).optional(),
       repairProfileId: z.string().min(1).optional(),
       auditProfileId: z.string().min(1).optional(),
+      consistencyCheckInterval: z.number().int().min(0).max(100).optional(),
+      consistencyProfileId: z.string().min(1).optional(),
     })
     .optional(),
 })

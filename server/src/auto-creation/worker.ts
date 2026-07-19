@@ -524,8 +524,10 @@ async function executeRun(run: AutoCreationRunRead): Promise<void> {
         })
       }
 
-      // 未过审查/终检的章进隔离区：正文保留供追溯与重写，但不再作为后续章的参考上下文
-      chapter.status = (result.auditPass === false || result.finalGatePass === false) ? 'quarantine' : 'review'
+      // 未过审查/终检的章进隔离区：正文保留供追溯与重写，但不再作为后续章的参考上下文。
+      // 注意：版本快照成功后 chapters 数组已被刷新，必须写新数组里的对象，否则状态丢失。
+      const statusTarget = chapters.find((item) => item.id === chapterId) ?? chapter
+      statusTarget.status = (result.auditPass === false || result.finalGatePass === false) ? 'quarantine' : 'review'
 
       ws.chapters = chapters
 
@@ -792,6 +794,7 @@ async function executeRun(run: AutoCreationRunRead): Promise<void> {
         }
       }
     } catch (reviewError) {
+      console.error('[worker] volume review failed:', reviewError)
       emit(run.userId, run.id, {
         type: 'run-warning',
         runId: run.id,
