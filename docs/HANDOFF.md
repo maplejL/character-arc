@@ -83,7 +83,7 @@
 2. ~~**批次间的大纲张力检查**~~ ✅（2026-07-19 完成）：新增 `outline-tension-check` 任务（`electron/main/ai/tasks/outline-tension-check.ts`），worker 在 `consistencyCheckInterval` 批次检查中追加一次边界核对——对照当前进度之后至多 5 个未写大纲节点（标题+摘要+冲突），检查批次正文是否提前消耗关键节拍（身世/底牌提前揭晓、反转泄底、关系越级、冲突提前解决），只报高置信问题；命中以「大纲张力」前缀并入批次 risks，走既有暂停 + run-warning 流程；核对失败不阻断批次。
 3. **写作日志结构化聚合**：把 audit/repair 的 issue 按 category 聚合进 `knowledgeDocuments`，memo 生成时把"高频坑"作为硬约束前置。
 4. **批次结束时的整卷复盘**：run 完成后对整批章节做一次"阶段摘要 + 批次级 risks"，写进项目 memory。
-5. **失败章隔离区**：失败章内容已写进 workspace，可能污染后续章的 `relatedChapters` / `volumeChapterSummaries`，建议 `status: 'quarantine'` 并在 `buildMemoBaseContext` 里排除。
+5. ~~**失败章隔离区**~~ ✅（2026-07-19 完成）：`ChapterDraft.status` 新增 `'quarantine'`。worker 在 pipeline 失败 / `auditPass` / `finalGatePass` 为 false 时把该章置为 quarantine（正文保留供追溯与重写）；两侧 `evaluateChapterAcceptanceSync` 对隔离章一律 not satisfied（重跑自动重新处理）；`buildMemoBaseContext`（server `chapter-pipeline.ts` + renderer `chapterProductionPipeline.ts`）与 `buildChapterProductionContext`（server/electron 两副本 `chapter-context.ts`）的 relatedChapters / volumeChapterSummaries / previousChapterHandoff / recentEndingsTrail / referenceOpenings / outlineChapterSplit.previousParts 全部排除隔离章，当前章自身隔离时仍保留位置；UI 三处 status 分支补「需重写」显示。
 
 ## 7. 容易踩的坑
 
