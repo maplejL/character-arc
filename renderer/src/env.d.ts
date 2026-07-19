@@ -627,6 +627,7 @@ declare global {
           projectId: string,
           volumeId: string,
           config: Record<string, unknown>,
+          options?: { startFromIndex?: number; startFromChapterId?: string },
         ) => Promise<{ runId: string; status: string }>
         fetchRun: (projectId: string, runId: string) => Promise<Record<string, unknown>>
         pauseRun: (projectId: string, runId: string) => Promise<{ ok: boolean; message?: string }>

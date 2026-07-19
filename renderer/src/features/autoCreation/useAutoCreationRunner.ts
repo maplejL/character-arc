@@ -111,7 +111,11 @@ export function useAutoCreationRunner(): {
   isRunning: Ref<boolean>
   showRunPanel: ComputedRef<boolean>
   canResume: ComputedRef<boolean>
-  startVolumeAutoCreation: (volumeId: string, config?: Partial<AutoCreationConfig>) => Promise<void>
+  startVolumeAutoCreation: (
+    volumeId: string,
+    config?: Partial<AutoCreationConfig>,
+    options?: { startFromChapterId?: string },
+  ) => Promise<void>
   resumeRun: () => Promise<void>
   pauseRun: () => Promise<void>
   stopRun: () => Promise<void>
@@ -533,7 +537,11 @@ export function useAutoCreationRunner(): {
     if (activeRun.value) clearPersistedAutoCreationLogs(activeRun.value.id)
   }
 
-  async function startVolumeAutoCreation(volumeId: string, config?: Partial<AutoCreationConfig>): Promise<void> {
+  async function startVolumeAutoCreation(
+    volumeId: string,
+    config?: Partial<AutoCreationConfig>,
+    options?: { startFromChapterId?: string },
+  ): Promise<void> {
     if (isRunning.value) return
     const project = appStore.currentProject
     if (!project) return
@@ -545,7 +553,12 @@ export function useAutoCreationRunner(): {
       logEntries.value = []
       chapterContext.value = {}
       try {
-        const started = await webAuto.startRun(project.id, volumeId, config ?? {})
+        const started = await webAuto.startRun(
+          project.id,
+          volumeId,
+          config ?? {},
+          options?.startFromChapterId ? { startFromChapterId: options.startFromChapterId } : undefined,
+        )
         const run: AutoCreationRun = {
           id: started.runId,
           projectId: project.id,
@@ -579,6 +592,12 @@ export function useAutoCreationRunner(): {
     const chapterIds = queue.map((entry) =>
       entry.kind === 'chapter' ? entry.chapterId : `${entry.outlineItemId}#${entry.partIndex}`,
     )
+    const startIndex = options?.startFromChapterId
+      ? Math.max(
+          0,
+          queue.findIndex((entry) => entry.kind === 'chapter' && entry.chapterId === options.startFromChapterId),
+        )
+      : 0
 
     logEntries.value = []
     chapterContext.value = {}
@@ -590,7 +609,7 @@ export function useAutoCreationRunner(): {
       status: 'running',
       config: { ...DEFAULT_AUTO_CREATION_CONFIG, ...config },
       chapterQueue: chapterIds,
-      currentIndex: 0,
+      currentIndex: startIndex,
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       completedChapterIds: [],

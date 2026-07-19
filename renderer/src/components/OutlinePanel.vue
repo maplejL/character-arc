@@ -69,17 +69,24 @@ function openAutoCreationConfig(volume: OutlineVolume): void {
   autoCreationConfigVisible.value = true
 }
 
-async function handleAutoCreationConfigConfirm(config: Partial<AutoCreationConfig>): Promise<void> {
+async function handleAutoCreationConfigConfirm(
+  config: Partial<AutoCreationConfig>,
+  options?: { startFromChapterId?: string },
+): Promise<void> {
   autoCreationConfigVisible.value = false
   const volume = pendingAutoCreationVolume.value
   pendingAutoCreationVolume.value = null
   if (!volume) return
   try {
     const maxChapters = config.maxChapters ?? readAutoCreationMaxChapters()
-    await autoCreation.startVolumeAutoCreation(volume.id, {
-      ...config,
-      ...(maxChapters ? { maxChapters } : {}),
-    })
+    await autoCreation.startVolumeAutoCreation(
+      volume.id,
+      {
+        ...config,
+        ...(maxChapters ? { maxChapters } : {}),
+      },
+      options,
+    )
     if (autoCreation.activeRun.value?.status === 'completed') {
       message.success(`《${volume.title}》自动创作已完成，请 review 各章节`)
     }

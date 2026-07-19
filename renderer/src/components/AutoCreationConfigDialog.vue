@@ -17,7 +17,7 @@ const AUTO_CREATION_CONFIG_STORAGE_KEY = 'characterarc:auto-creation-config'
 
 const props = defineProps<{ show: boolean; volumeId?: string; volumeTitle?: string }>()
 const emit = defineEmits<{
-  (e: 'confirm', config: Partial<AutoCreationConfig>): void
+  (e: 'confirm', config: Partial<AutoCreationConfig>, options?: { startFromChapterId?: string }): void
   (e: 'cancel'): void
 }>()
 
@@ -27,6 +27,7 @@ const project = computed(() => appStore.currentProject)
 const maxRepairRounds = ref(DEFAULT_AUTO_CREATION_CONFIG.maxFinalGateRounds)
 const maxChapters = ref<number | null>(null)
 const targetOutlineItemId = ref<string | null>(null)
+const startFromChapterId = ref<string | null>(null)
 const forcedWordMin = ref<number | null>(null)
 const forcedWordMax = ref<number | null>(null)
 const selectedRefIds = ref<string[]>([])
@@ -44,14 +45,42 @@ const volumeOutlineItems = computed(() => {
     .sort((a, b) => a.sortOrder - b.sortOrder)
 })
 
-const volumeQueueSize = computed(() => {
-  if (!props.volumeId) return 0
+const volumeQueue = computed(() => {
+  if (!props.volumeId) return []
   return buildVolumeChapterQueue({
     volumeId: props.volumeId,
     chapters: appStore.chapters,
     outlineItems: appStore.outlineItems,
-  }).length
+  })
 })
+
+const volumeQueueSize = computed(() => volumeQueue.value.length)
+
+const startChapterOptions = computed(() => {
+  const chaptersById = new Map(appStore.chapters.map((chapter) => [chapter.id, chapter]))
+  const options: Array<{ label: string; value: string }> = []
+  volumeQueue.value.forEach((entry, index) => {
+    if (entry.kind !== 'chapter') return
+    const chapter = chaptersById.get(entry.chapterId)
+    if (!chapter) return
+    options.push({ label: `第 ${index + 1} 章 · ${chapter.title}`, value: chapter.id })
+  })
+  return options
+})
+
+const startFromQueueIndex = computed(() => {
+  if (!startFromChapterId.value) return 0
+  const index = volumeQueue.value.findIndex(
+    (entry) => entry.kind === 'chapter' && entry.chapterId === startFromChapterId.value,
+  )
+  return index > 0 ? index : 0
+})
+
+const remainingQueueSize = computed(() => Math.max(0, volumeQueueSize.value - startFromQueueIndex.value))
+
+const selectedStartChapterLabel = computed(
+  () => startChapterOptions.value.find((option) => option.value === startFromChapterId.value)?.label ?? null,
+)
 
 const targetOutlineQueueSize = computed(() => {
   if (!props.volumeId || !targetOutlineItemId.value) return volumeQueueSize.value
@@ -75,11 +104,14 @@ const selectedTargetOutline = computed(() =>
 )
 
 const effectiveQueueSize = computed(() =>
-  getAutoCreationEffectiveTotal({
-    chapterQueueLength: volumeQueueSize.value,
-    maxChapters: maxChapters.value ?? undefined,
-    targetOutlineQueueLength: targetOutlineItemId.value ? targetOutlineQueueSize.value : undefined,
-  }),
+  Math.min(
+    getAutoCreationEffectiveTotal({
+      chapterQueueLength: volumeQueueSize.value,
+      maxChapters: maxChapters.value ?? undefined,
+      targetOutlineQueueLength: targetOutlineItemId.value ? targetOutlineQueueSize.value : undefined,
+    }),
+    remainingQueueSize.value,
+  ),
 )
 
 const forcedWordRangeError = computed(() => {
@@ -139,6 +171,7 @@ watch(
       saved.maxFinalGateRounds ?? saved.maxAuditRepairRounds ?? DEFAULT_AUTO_CREATION_CONFIG.maxFinalGateRounds
     maxChapters.value = saved.maxChapters ?? null
     targetOutlineItemId.value = saved.targetOutlineItemId ?? null
+    startFromChapterId.value = null
     forcedWordMin.value = null
     forcedWordMax.value = null
     selectedRefIds.value = [...(project.value?.selectedReferenceWorkIds ?? [])]
@@ -168,7 +201,7 @@ function handleConfirm(): void {
     config.forcedWordCountMax = forcedWordMax.value
   }
   saveConfig(config)
-  emit('confirm', config)
+  emit('confirm', config, startFromChapterId.value ? { startFromChapterId: startFromChapterId.value } : undefined)
 }
 </script>
 
@@ -189,6 +222,9 @@ function handleConfirm(): void {
         <p class="summary-title">将按本分卷大纲顺序处理</p>
         <p class="summary-meta">
           本分卷共 <strong>{{ volumeQueueSize }}</strong> 章（已按节点「规划章数」展开）
+          <template v-if="selectedStartChapterLabel">
+            · 从「<strong>{{ selectedStartChapterLabel }}</strong>」起，剩余 <strong>{{ remainingQueueSize }}</strong> 章
+          </template>
           <template v-if="targetOutlineItemId">
             · 处理至「<strong>{{ selectedTargetOutline?.title }}</strong>」（含）共 <strong>{{ targetOutlineQueueSize }}</strong> 章
           </template>
@@ -207,6 +243,19 @@ function handleConfirm(): void {
           </li>
           <li v-if="volumeOutlinePreview.length > 6" class="more">… 另有 {{ volumeOutlinePreview.length - 6 }} 个节点</li>
         </ul>
+      </section>
+
+      <section class="config-section">
+        <label class="section-label">起始章节（可选，用于从某章重跑）</label>
+        <p class="section-hint">默认从分卷开头开始；选择后从该章起按顺序处理，内容已合格的章仍会自动跳过</p>
+        <n-select
+          v-model:value="startFromChapterId"
+          :options="startChapterOptions"
+          clearable
+          filterable
+          placeholder="从分卷开头开始（默认）"
+          size="small"
+        />
       </section>
 
       <section class="config-section">
