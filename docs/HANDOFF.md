@@ -96,10 +96,11 @@
 
 ---
 
-## 8. 当前 git 状态快照（2026-07-19 收拢后更新）
+## 8. 当前 git 状态快照（2026-07-19 晚更新）
 
-- `E:\ai\小说\character-arc-web`：HEAD 已推送 origin/feature/auto_mode_develop，本地不领先。收拢后提交线：`87eaa44`（全量同步，已 scrub defaults.ts 密钥）→ `270b260`（serverStreamTask 热修）→ `5e14988`（deploy.ps1 自动探测）→ `8a14b1b`（遗留事项 #1 重跑 UI）→ `1284ea2`（HANDOFF 更新）→ `459f17c`（收拢：server tsc 门禁修复 + codestable 入库）。
+- `E:\ai\小说\character-arc-web`：HEAD 已推送 origin/feature/auto_mode_develop，本地不领先。近期提交线：`87eaa44`（全量同步，已 scrub 密钥）→ `270b260`（serverStreamTask 热修）→ `5e14988`（deploy.ps1 自动探测）→ `8a14b1b`（#1 重跑 UI）→ `459f17c`（收拢：server tsc 门禁）→ `2ed6cd1`（#2 大纲张力）→ `f8ce83f`（#5 失败章隔离区）→ `bf1cd59`（#3 写作日志聚合）→ `15d6a18`（#4 整卷复盘）。
+- **§6 遗留事项 5 项已全部完成**：#1 从指定章重跑、#2 批次间大纲张力检查、#3 写作日志结构化聚合、#4 整卷复盘、#5 失败章隔离区，均已上生产并验证。
 - 原 `C:\Users\maple\character-arc` 已删除（内容经树级比对确认全覆盖；`.codestable`、`data/users` 已迁入 E:）。
 - 生产服务器 `124.222.218.97` 运行正常，`https://124.222.218.97/character-arc/` 可访问，API 健康检查通过。
 
-**下一步动作建议**：剩余 4 件遗留事项（批次张力检查、日志聚合、整卷复盘、失败章隔离区）任选其一；改动后跑双门禁（§4），提交推送后按需 deploy.ps1。
+**下一步动作建议**：§6 已清空。新方向可从实际生产质量出发（如观察 outline-tension-check / quality-pitfalls 在真实 run 中的命中率再调参）；任何改动先跑双门禁（§4），提交推送后用 deploy.ps1 部署。
