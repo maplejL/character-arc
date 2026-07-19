@@ -145,12 +145,22 @@ Write-Host "[6/9] API health (remote)..." -ForegroundColor Yellow
 Invoke-Remote "curl -sf http://127.0.0.1:8010/health && echo" "health check"
 Write-Host "       OK" -ForegroundColor Green
 
-Write-Host "[7/9] Patch nginx (merge into language-learning site)..." -ForegroundColor Yellow
-Invoke-Remote "sudo cp /etc/nginx/sites-enabled/language-learning /tmp/language-learning.bak.`$(date +%Y%m%d%H%M%S)" "backup nginx"
-Invoke-Remote "sudo bash $remoteRoot/patch-nginx-character-arc.sh /etc/nginx/sites-enabled/language-learning" "patch nginx"
-Invoke-Remote "sudo python3 $remoteRoot/patch-nginx-character-arc-upgrade.py /etc/nginx/sites-enabled/language-learning" "upgrade nginx limits/gzip"
-Invoke-Remote "sudo python3 $remoteRoot/patch-nginx-character-arc-redirect.py /etc/nginx/sites-enabled/language-learning" "patch nginx redirect"
-Write-Host "       OK" -ForegroundColor Green
+Write-Host "[7/9] Patch nginx (skip if already routed)..." -ForegroundColor Yellow
+# 站点文件名历史为 language-learning，服务器重构后为 main.conf；自动探测
+$sitePath = (& $plink -pw $Password -P $Port -batch $conn "for f in /etc/nginx/sites-enabled/language-learning /etc/nginx/sites-enabled/main.conf; do [ -f `$f ] && echo `$f && break; done" | Select-Object -First 1)
+$sitePath = "$sitePath".Trim()
+if (-not $sitePath) { throw "nginx site config not found (language-learning/main.conf)" }
+# character-arc 路由已存在时跳过补丁（补丁脚本对 main.conf 结构非幂等，重复跑会破坏配置）
+$routeCount = [int]((& $plink -pw $Password -P $Port -batch $conn "grep -c character-arc $sitePath || true") | Select-Object -First 1)
+if ($routeCount -gt 0) {
+    Write-Host "       already routed in $sitePath - skip" -ForegroundColor Green
+} else {
+    Invoke-Remote "sudo cp $sitePath /tmp/character-arc-site.bak.`$(date +%Y%m%d%H%M%S)" "backup nginx"
+    Invoke-Remote "sudo bash $remoteRoot/patch-nginx-character-arc.sh $sitePath" "patch nginx"
+    Invoke-Remote "sudo python3 $remoteRoot/patch-nginx-character-arc-upgrade.py $sitePath" "upgrade nginx limits/gzip"
+    Invoke-Remote "sudo python3 $remoteRoot/patch-nginx-character-arc-redirect.py $sitePath" "patch nginx redirect"
+    Write-Host "       patched" -ForegroundColor Green
+}
 
 Write-Host "[8/9] nginx -t..." -ForegroundColor Yellow
 Invoke-Remote-Soft "sudo nginx -t" "nginx test"
