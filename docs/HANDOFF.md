@@ -6,18 +6,15 @@
 
 ---
 
-## 1. 双仓库布局（关键）
+## 1. 单一主目录（2026-07-19 收拢完成）
 
-本次工作跨了两个仓库，**同一批逻辑在两边都改了**，不要漏同步：
+唯一工作目录：**`E:\ai\小说\character-arc-web`**（GitHub `maplejL/character-arc`，分支 `feature/auto_mode_develop`）。
 
-| 仓库 | 路径 | 角色 |
-|------|------|------|
-| **主仓库（有历史提交）** | `E:\ai\小说\character-arc-web` | 已提交 226 项，含 Electron + Web 全量代码 |
-| **工作副本（有大量未提交改动）** | `C:\Users\maple\character-arc` | 62 个未提交文件（+1706/-257），是实际干活的地方 |
-
+- 原 `C:\Users\maple\character-arc` 已删除；其 10 个本地提交的内容经树级比对确认全量在 E: 中（`87eaa44` 全量同步 + `459f17c` 收拢收尾），无需再同步。
 - 核心共享逻辑（收敛循环、preflight、convergence）放在 **`electron/shared/auto-creation/`**，server 与 renderer 都从它 import。
-- **部署到生产服务器前，必须把 `C:\Users\maple\character-arc` 的改动同步到 `E:\ai\小说\character-arc-web` 并提交**，否则生产会跑旧代码。
-- 本仓库（`E:\ai\小说\character-arc-web`）的 `CLAUDE.md` 是主入口；`C:\Users\maple\character-arc\CLAUDE.md` 与它同构。
+- 运维脚本（`tools/prod-*`、`tools/startup.sh`、`server/scripts/prod-*` 等含硬编码密钥）**保留在本地 untracked**，不进 git——`git status` 里看到它们属正常。
+- `web/.env.e2e`、`server/.env` 被 `.gitignore` 的 `.env.*` 规则保护，勿提交真实密钥（GitHub push protection 会拦截）。
+- 本仓库的 `CLAUDE.md` 是主入口。
 
 ## 2. 已完成的迭代（自动创作三层防御）
 
@@ -64,16 +61,18 @@
 
 ## 4. 类型与构建
 
-- **静态门禁**：`cd C:\Users\maple\character-arc; npx vue-tsc --noEmit`
-- ⚠️ **已知盲区**（2026-07-19 部署事故确认）：根目录 `vue-tsc` 不覆盖 `server/` 的所有模块解析路径（如 `server/src/auto-creation/chapter-pipeline.ts` 的 `serverStreamTask` 缺 `export` 就没被它抓到）。**部署前务必额外跑一次 `cd server && npx tsc --noEmit` 或至少对 server 改动文件做语法检查**。
+- **静态门禁（双门禁，均已验证零错误）**：
+  1. `cd E:\ai\小说\character-arc-web; npx vue-tsc --noEmit`（全量：electron + renderer + server）
+  2. `cd E:\ai\小说\character-arc-web\server; npx tsc --noEmit`（server 专项，补 vue-tsc 盲区）
+- server tsc 门禁于 2026-07-19 修复：`server/tsconfig.json` 已去掉 `rootDir`（emit 用 `tsconfig.build.json` 保留 `rootDir: src`）、增加 `@shared/*` paths（含 `.ts` 回退解决 ESM 扩展名问题）；此前的 138 个 TS6059 / 19 个 TS2307 均为结构噪声，已随配置消除，剩余 14 个真实类型错误已修复。
+- ⚠️ 教训（2026-07-19 部署事故）：`chapter-pipeline.ts` 的 `serverStreamTask` 缺 `export` 曾逃过根 vue-tsc 直达生产——**server 改动必须过 server tsc 再部署**。
 - 不能用 `pnpm run build` 里的 `set ELECTRON_RUN_AS_NODE=`（那是 cmd/PowerShell 语法，在 bash 里会挂）。
-- `server/tsconfig.json` 的 `rootDir` 只包 `server/src`，直接 `tsc -p server` 会因 import `electron/` 报 TS6059——**用根目录的 `vue-tsc --noEmit` 做全量检查**。
 
 ## 5. 生产部署
 
 - 生产服务器：`124.222.218.97`
-- 部署脚本：`deploy.ps1` / `deploy.bat`（本仓库根目录）
-- **部署前必须同步双仓库**：`C:\Users\maple\character-arc` → `E:\ai\小说\character-arc-web`，提交后再跑部署。
+- 部署脚本：`deploy.ps1` / `deploy.bat`（本仓库根目录，参数已内置）
+- deploy.ps1 流程：web build → `tools/emit-electron-ai.mjs`（electron TS 就地 emit 供 server 运行时 import）→ server build 占位跳过（生产用 tsx 跑 `server/src`）→ 上传 → startup.sh 重启 → 健康检查 → nginx 补丁（已含 character-arc 路由时自动跳过）。
 - 模型配置在数据库 `user_ai_configs.production_models_json`，可用 `server/scripts/prod-patch-audit-model.mjs` 类脚本远程改。
 
 ## 6. 已知遗留事项（未做）
@@ -88,19 +87,19 @@
 
 ## 7. 容易踩的坑
 
-- **双仓库不同步**：改了一边忘另一边，生产会跑旧代码。改完先同步再部署。
 - **`normalize` 接口已变**：新增任务时记得 `normalize(raw, input?)` 第二个参数，否则会拿不到上下文。
 - **`chapter_versions` 表已存在**：`electron/main/workspace-store.ts` 有 schema，server 侧用 `chapter-json.ts` 的 `commitChapterEditJson` 写入，别自己再造一套版本逻辑。
 - **PowerShell 里 `&&` 不能用**：用 `;` 分隔命令。
 - **vue-tsc 有盲区**（2026-07-19 事故）：根目录 `vue-tsc --noEmit` 不覆盖 `server/` 的所有模块解析路径，server 改动部署前必须额外 `cd server && npx tsc --noEmit`。
 - **nginx 站点文件已变**：生产 nginx 从 `language-learning` 重构为 `main.conf`，旧补丁脚本会重复插 gzip 指令导致配置损坏；`deploy.ps1` 已改为自动探测站点文件，**不要手动改 nginx 配置**。
+- **GitHub push protection 会拦密钥**：`web/src/lib/defaults.ts` 的 DeepSeek key 曾致 push 被拒，已通过 amend `87eaa44` 清除；真实密钥只放 `.env*`（已忽略），勿写进源码。
 
 ---
 
-## 8. 当前 git 状态快照（2026-07-19 部署后更新）
+## 8. 当前 git 状态快照（2026-07-19 收拢后更新）
 
-- `E:\ai\小说\character-arc-web`：HEAD = `ce35abb`（全量同步 C: 的 62 项改动 + 缺失源码，234 文件 +29013）→ 后续热修 `78ac650`（serverStreamTask 缺 export）、`2f69d07`（deploy.ps1 自动探测站点文件）、`78b2971`（遗留事项 #1 从指定章手动重跑 UI）。
-- `C:\Users\maple\character-arc`：与 E: 已双向同步，剩 7 处未提交改动（热修 + deploy.ps1 + 重跑 UI 4 个文件）。
-- 生产服务器 `124.222.218.97` 当前运行的是新代码，`https://124.222.218.97/character-arc/` 正常，API 健康检查通过。
+- `E:\ai\小说\character-arc-web`：HEAD 已推送 origin/feature/auto_mode_develop，本地不领先。收拢后提交线：`87eaa44`（全量同步，已 scrub defaults.ts 密钥）→ `270b260`（serverStreamTask 热修）→ `5e14988`（deploy.ps1 自动探测）→ `8a14b1b`（遗留事项 #1 重跑 UI）→ `1284ea2`（HANDOFF 更新）→ `459f17c`（收拢：server tsc 门禁修复 + codestable 入库）。
+- 原 `C:\Users\maple\character-arc` 已删除（内容经树级比对确认全覆盖；`.codestable`、`data/users` 已迁入 E:）。
+- 生产服务器 `124.222.218.97` 运行正常，`https://124.222.218.97/character-arc/` 可访问，API 健康检查通过。
 
-**下一步动作建议**：剩余 4 件遗留事项（批次张力检查、日志聚合、整卷复盘、失败章隔离区）任选其一；部署前记得先跑 `cd server && npx tsc --noEmit` 补 vue-tsc 的盲区。
+**下一步动作建议**：剩余 4 件遗留事项（批次张力检查、日志聚合、整卷复盘、失败章隔离区）任选其一；改动后跑双门禁（§4），提交推送后按需 deploy.ps1。
