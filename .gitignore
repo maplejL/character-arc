@@ -83,6 +83,7 @@ design-preview/
 docs/*
 !docs/assets/
 !docs/release-notes/
+!docs/HANDOFF.md
 prototype/
 
 # Optional Python helpers / notebooks
