@@ -277,6 +277,30 @@ declare global {
         result?: CharacterArcBackfillStateResult
         error?: string
       }>
+      reverseExtractContinuation: (payload: {
+        projectId: string
+        maxBodyChapters?: number
+        maxCharacters?: number
+        maxOutlineItems?: number
+        maxWorldview?: number
+        maxRelations?: number
+        rebuildImportedOutline?: boolean
+      }) => Promise<{
+        success: boolean
+        result?: {
+          projectId: string
+          counts?: {
+            worldview: number
+            characters: number
+            relationships: number
+            volumes: number
+            outlineItems: number
+          }
+          warnings?: string[]
+        }
+        error?: string
+        message?: string
+      }>
       onBackfillStateProgress: (callback: (payload: CharacterArcBackfillStateProgressPayload) => void) => () => void
       readStoryState: (projectId: string) => Promise<{
         success: boolean
@@ -596,6 +620,27 @@ declare global {
         onEvent: (
           callback: (payload: import('@shared/assistant-runtime').AssistantEventPush) => void
         ) => () => void
+      }
+
+      autoCreation?: {
+        startRun: (
+          projectId: string,
+          volumeId: string,
+          config: Record<string, unknown>,
+        ) => Promise<{ runId: string; status: string }>
+        fetchRun: (projectId: string, runId: string) => Promise<Record<string, unknown>>
+        pauseRun: (projectId: string, runId: string) => Promise<{ ok: boolean; message?: string }>
+        resumeRun: (projectId: string, runId: string) => Promise<{ ok: boolean; message?: string }>
+        cancelRun: (projectId: string, runId: string) => Promise<{ ok: boolean; message?: string }>
+        subscribeRun: (
+          projectId: string,
+          runId: string,
+          onEvent: (event: Record<string, unknown>) => void,
+        ) => () => void
+      }
+
+      session?: {
+        setAutoCreationActive: (active: boolean) => void
       }
     }
   }

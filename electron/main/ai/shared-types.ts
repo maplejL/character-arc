@@ -65,7 +65,9 @@ export type AiTaskName =
   | 'chapter-summarize'
   | 'chapter-scene-plan'
   | 'chapter-memo'
+  | 'chapter-brief'
   | 'chapter-audit'
+  | 'chapter-quality-review'
   | 'plot-thread-detect'
   | 'project-bootstrap'
   | 'spiral-seed'
@@ -73,15 +75,18 @@ export type AiTaskName =
   | 'spiral-validate'
   | 'chapter-analysis'
   | 'chapter-repair'
+  | 'chapter-final-polish'
   | 'chapter-session-note'
   | 'inspiration-pack'
   | 'story-deep-audit'
   | 'state-backfill'
+  | 'continuation-reverse-extract'
   | 'character-enhance'
   | 'worldview-enhance'
   | 'outline-enhance'
   | 'relation-enhance'
   | 'cover-generate'
+  | 'chapter-title-batch'
 
 /**
  * AI 运行时注入 prompt 的知识条目。
@@ -102,6 +107,8 @@ export type AiRunUsage = {
   totalTokens?: number
   reasoningTokens?: number
   cachedInputTokens?: number
+  /** prompt tokens not served from provider prefix cache (derived when absent). */
+  promptCacheMissTokens?: number
 }
 
 export type AiRunMeta = {
@@ -317,6 +324,30 @@ export type ProjectBootstrapResult = {
   outlineItems: OutlineResult[]
 }
 
+/** 续写导入后：从正文反推设定 */
+export type ContinuationReverseExtractResult = {
+  worldviewEntries: Array<{ type: string; title: string; content: string }>
+  characters: Array<{ name: string; role: string; description: string; tags: string[] }>
+  characterRelationships: Array<{
+    fromName: string
+    toName: string
+    type: string
+    description: string
+    intensity: number
+  }>
+  outlineVolumes: Array<{ title: string; summary: string; wordTarget?: string }>
+  outlineItems: Array<{
+    volumeTitle: string
+    title: string
+    wordTarget: string
+    conflict: string
+    summary: string
+    chapterFrom?: number
+    chapterTo?: number
+  }>
+  warnings: string[]
+}
+
 /**
  * 创作记忆集合生成结果。
  * 每个 key 对应一种创作记忆（任务计划、发现、进度等）。
@@ -422,6 +453,20 @@ export type ChapterAuditResult = {
   }
 }
 
+/** 章节质量审查：跨章连续性、大纲对齐、叙事结构（自动创作流水线） */
+export type ChapterQualityReviewResult = {
+  review: {
+    pass: boolean
+    issues: Array<{
+      severity: 'critical' | 'warning' | 'hint'
+      category: string
+      ref: string
+      hint: string
+      repairAction?: string
+    }>
+  }
+}
+
 /** 单条情节线索检测结果 */
 export type PlotThreadDetectEntry = {
   title: string
@@ -432,6 +477,15 @@ export type PlotThreadDetectEntry = {
 /** 情节线索检测结果（多条线索） */
 export type PlotThreadDetectResult = {
   entries: PlotThreadDetectEntry[]
+}
+
+/** 批量章节标题建议结果 */
+export type ChapterTitleBatchResult = {
+  suggestion: string
+  entries: Array<{
+    index: number
+    title: string
+  }>
 }
 
 /** 所有 AI 任务结果类型的联合类型 */
@@ -446,6 +500,7 @@ export type AiTaskResult =
   | AssistantIntentResult
   | AssistantActionProposalResult
   | ProjectBootstrapResult
+  | ContinuationReverseExtractResult
   | WorkflowDocumentsResult
   | WorkflowStageDocumentsResult
   | ChapterAnalysisResult
@@ -456,6 +511,8 @@ export type AiTaskResult =
   | ChapterScenePlanResult
   | ChapterMemoResult
   | ChapterAuditResult
+  | ChapterQualityReviewResult
+  | ChapterTitleBatchResult
   | SpiralSeedResult
   | SpiralExpandResult
   | SpiralValidateResult

@@ -521,40 +521,49 @@ export function applyStateDelta(
 
   // Foreshadowing updates
   if (delta.foreshadowing_delta) {
-    for (const planted of delta.foreshadowing_delta.planted) {
+    const planted = Array.isArray(delta.foreshadowing_delta.planted)
+      ? delta.foreshadowing_delta.planted
+      : []
+    const advanced = Array.isArray(delta.foreshadowing_delta.advanced)
+      ? delta.foreshadowing_delta.advanced
+      : []
+    const resolved = Array.isArray(delta.foreshadowing_delta.resolved)
+      ? delta.foreshadowing_delta.resolved
+      : []
+    for (const item of planted) {
       db.prepare(`
         INSERT OR IGNORE INTO story_foreshadowing
           (id, project_id, foreshadowing_id, type, description, status, planted_chapter,
            planted_method, payoff_chapter, clues_json, connections_json, updated_at)
         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, '[]', '[]', ?)
       `).run(
-        uid(), projectId, planted.id, planted.type, planted.description,
-        chapterIndex, planted.method, planted.payoff_chapter ?? null, timestamp
+        uid(), projectId, item.id, item.type, item.description,
+        chapterIndex, item.method, item.payoff_chapter ?? null, timestamp
       )
     }
 
-    for (const advanced of delta.foreshadowing_delta.advanced) {
+    for (const item of advanced) {
       const row = db.prepare(
         `SELECT clues_json FROM story_foreshadowing WHERE project_id = ? AND foreshadowing_id = ?`
-      ).get(projectId, advanced.id) as Record<string, unknown> | undefined
+      ).get(projectId, item.id) as Record<string, unknown> | undefined
 
       if (row) {
         const clues = parseJson<Foreshadowing['clues']>(row.clues_json, [])
-        clues.push({ chapter: chapterIndex, clue: advanced.clue, method: advanced.method })
+        clues.push({ chapter: chapterIndex, clue: item.clue, method: item.method })
         db.prepare(`
           UPDATE story_foreshadowing
           SET clues_json = ?, status = 'advanced', updated_at = ?
           WHERE project_id = ? AND foreshadowing_id = ?
-        `).run(JSON.stringify(clues), timestamp, projectId, advanced.id)
+        `).run(JSON.stringify(clues), timestamp, projectId, item.id)
       }
     }
 
-    for (const resolved of delta.foreshadowing_delta.resolved) {
+    for (const item of resolved) {
       db.prepare(`
         UPDATE story_foreshadowing
         SET status = 'resolved', resolved_chapter = ?, updated_at = ?
         WHERE project_id = ? AND foreshadowing_id = ?
-      `).run(chapterIndex, timestamp, projectId, resolved.id)
+      `).run(chapterIndex, timestamp, projectId, item.id)
     }
   }
 

@@ -51,12 +51,16 @@ const TASK_DEFAULT_CAPABILITIES: Record<AiTaskName, PromptCapabilityId[]> = {
   'chapter-summarize': ['settings', 'chapters', 'analysis'],
   'chapter-scene-plan': ['settings', 'chapters', 'outline'],
   'chapter-memo': ['settings', 'chapters', 'outline', 'characters', 'relations', 'worldview'],
-  'chapter-audit': ['settings', 'chapters', 'analysis'],
+  'chapter-brief': ['settings', 'chapters', 'outline', 'characters', 'relations', 'worldview'],
+  'chapter-audit': ['settings', 'chapters', 'analysis', 'outline', 'characters', 'relations', 'worldview'],
+  'chapter-quality-review': ['settings', 'chapters', 'analysis', 'outline', 'characters', 'relations', 'worldview'],
   'plot-thread-detect': ['settings', 'chapters', 'analysis'],
   'chapter-repair': ['settings', 'chapters', 'worldview', 'characters', 'relations', 'outline', 'writing-style', 'project-skills'],
+  'chapter-final-polish': ['settings', 'chapters', 'worldview', 'characters', 'relations', 'outline', 'writing-style', 'project-skills'],
   'chapter-session-note': [],
   'story-deep-audit': ['settings', 'chapters', 'analysis', 'worldview', 'characters', 'relations', 'outline', 'project-skills'],
   'state-backfill': ['settings', 'chapters'],
+  'continuation-reverse-extract': ['settings', 'chapters', 'outline', 'characters', 'relations', 'worldview', 'import-export'],
   'spiral-seed': ['settings', 'worldview', 'writing-style'],
   'spiral-expand': ['settings', 'worldview', 'characters', 'outline', 'writing-style'],
   'spiral-validate': ['settings', 'worldview', 'characters', 'outline'],
@@ -65,7 +69,8 @@ const TASK_DEFAULT_CAPABILITIES: Record<AiTaskName, PromptCapabilityId[]> = {
   'outline-enhance': ['settings', 'outline', 'worldview', 'characters', 'writing-style'],
   'relation-enhance': ['settings', 'characters', 'relations', 'worldview', 'writing-style'],
   // 封面生成走独立图片通道，不经过 prompt capability 流程；此项仅为满足类型完整性。
-  'cover-generate': ['settings']
+  'cover-generate': ['settings'],
+  'chapter-title-batch': ['settings', 'chapters', 'outline', 'writing-style'],
 }
 
 /**

@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { ArrowLeft, ChevronDown, ChevronsDownUp, FilePlus, FileText, FolderPlus, MoreVertical, Plus, Search } from 'lucide-vue-next'
-import { NButton, NDropdown, NForm, NFormItem, NInput, NModal, NSelect, NTag, NTooltip, useDialog, useMessage } from 'naive-ui'
+import { ArrowLeft, CheckSquare, ChevronDown, ChevronsDownUp, Download, FilePlus, FileText, FolderPlus, MoreVertical, Plus, Search, Sparkles, Square, Trash2 } from 'lucide-vue-next'
+import { NButton, NCheckbox, NDropdown, NForm, NFormItem, NInput, NModal, NSelect, NTag, NTooltip, useDialog, useMessage } from 'naive-ui'
 import ChapterMetaDialog from './ChapterMetaDialog.vue'
+import ChapterTitleBatchDialog from './ChapterTitleBatchDialog.vue'
 import { useAppStore } from '@/stores/app'
 import { formatVolumeLabel } from '@/features/workspace/outlineVolumes'
 import { getChapterCharacterCount, getPlainTextFromEditorContent } from '@/features/chapters/editorContent'
+import {
+  buildChaptersExportFileStem,
+  buildChaptersExportPayloadFromStore
+} from '@/features/chapters/exportChaptersText'
 import type { ChapterDraft, OutlineItem } from '@/types/app'
 import type { DropdownOption, SelectOption } from 'naive-ui'
 import { toIpcPayload } from '@/utils/ipcPayload'
@@ -20,10 +25,13 @@ const message = useMessage()
 
 const keyword = ref('')
 const collapsed = reactive<Record<string, boolean>>({})
+const batchMode = ref(false)
+const selectedChapterIds = ref<string[]>([])
 
 const metaDialogVisible = ref(false)
 const metaDialogChapter = ref<ChapterDraft | null>(null)
 const createDialogVisible = ref(false)
+const titleBatchDialogVisible = ref(false)
 const createForm = reactive({
   volumeId: '',
   outlineItemId: '',
@@ -51,6 +59,22 @@ const filteredGroups = computed(() => {
 
 const totalVisible = computed(() =>
   filteredGroups.value.reduce((n, g) => n + g.items.length, 0)
+)
+
+const visibleChapterIds = computed(() =>
+  filteredGroups.value.flatMap((group) => group.items.map((chapter) => chapter.id))
+)
+
+const selectedVisibleCount = computed(() =>
+  visibleChapterIds.value.filter((id) => selectedChapterIds.value.includes(id)).length
+)
+
+const allVisibleSelected = computed(() =>
+  visibleChapterIds.value.length > 0 && selectedVisibleCount.value === visibleChapterIds.value.length
+)
+
+const canBatchDelete = computed(() =>
+  selectedChapterIds.value.length > 0 && appStore.chapters.length > 1
 )
 
 const totalWords = computed(() =>
@@ -86,6 +110,101 @@ watch(
   }
 )
 
+watch(batchMode, (enabled) => {
+  if (!enabled) {
+    selectedChapterIds.value = []
+  }
+})
+
+function toggleBatchMode(): void {
+  batchMode.value = !batchMode.value
+}
+
+function isChapterSelected(chapterId: string): boolean {
+  return selectedChapterIds.value.includes(chapterId)
+}
+
+function toggleChapterSelection(chapterId: string): void {
+  if (isChapterSelected(chapterId)) {
+    selectedChapterIds.value = selectedChapterIds.value.filter((id) => id !== chapterId)
+    return
+  }
+  selectedChapterIds.value = [...selectedChapterIds.value, chapterId]
+}
+
+function isVolumeFullySelected(volumeId: string): boolean {
+  const group = filteredGroups.value.find((item) => item.volume.id === volumeId)
+  if (!group || group.items.length === 0) return false
+  return group.items.every((chapter) => isChapterSelected(chapter.id))
+}
+
+function isVolumePartiallySelected(volumeId: string): boolean {
+  const group = filteredGroups.value.find((item) => item.volume.id === volumeId)
+  if (!group || group.items.length === 0) return false
+  const selectedCount = group.items.filter((chapter) => isChapterSelected(chapter.id)).length
+  return selectedCount > 0 && selectedCount < group.items.length
+}
+
+function toggleVolumeSelection(volumeId: string): void {
+  const group = filteredGroups.value.find((item) => item.volume.id === volumeId)
+  if (!group) return
+  const ids = group.items.map((chapter) => chapter.id)
+  if (isVolumeFullySelected(volumeId)) {
+    selectedChapterIds.value = selectedChapterIds.value.filter((id) => !ids.includes(id))
+    return
+  }
+  selectedChapterIds.value = [...new Set([...selectedChapterIds.value, ...ids])]
+}
+
+function toggleSelectAllVisible(): void {
+  if (allVisibleSelected.value) {
+    const visible = new Set(visibleChapterIds.value)
+    selectedChapterIds.value = selectedChapterIds.value.filter((id) => !visible.has(id))
+    return
+  }
+  selectedChapterIds.value = [...new Set([...selectedChapterIds.value, ...visibleChapterIds.value])]
+}
+
+function confirmBatchDelete(): void {
+  const count = selectedChapterIds.value.length
+  if (count === 0) return
+  if (appStore.chapters.length <= 1) {
+    message.warning('至少保留一章')
+    return
+  }
+
+  const deletingAll = count >= appStore.chapters.length
+  dialog.warning({
+    title: '确认批量删除章节',
+    content: deletingAll
+      ? `已选 ${count} 章。系统将至少保留 1 章，其余章节删除后草稿将无法恢复。`
+      : `确定要删除选中的 ${count} 个章节吗？删除后草稿将无法恢复。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    autoFocus: false,
+    closable: false,
+    onPositiveClick: () => {
+      const removed = appStore.deleteChapters(selectedChapterIds.value)
+      if (removed === 0) {
+        message.warning('没有章节被删除')
+        return
+      }
+      selectedChapterIds.value = []
+      batchMode.value = false
+      message.success(`已删除 ${removed} 个章节`)
+    }
+  })
+}
+
+function handleChapterRowClick(chapter: ChapterDraft): void {
+  if (batchMode.value) {
+    toggleChapterSelection(chapter.id)
+    return
+  }
+  appStore.selectChapter(chapter.id)
+  emit('navigate')
+}
+
 function toggleVolume(id: string): void {
   collapsed[id] = !collapsed[id]
 }
@@ -119,10 +238,15 @@ function submitCreateChapter(): void {
     return
   }
 
+  const customTitle = createForm.title.trim()
+  const usedCustomTitle = Boolean(customTitle && customTitle !== item.title.trim())
+
   appStore.createChapterFromOutlineItem(item)
-  appStore.updateChapter(appStore.selectedChapterId, {
-    title: createForm.title.trim()
-  })
+  if (usedCustomTitle) {
+    appStore.updateChapter(appStore.selectedChapterId, {
+      title: customTitle
+    })
+  }
   appStore.updateOutlineItem(item.id, {
     status: item.status === 'done' ? 'done' : 'drafting'
   })
@@ -154,6 +278,32 @@ function buildChapterExportFileName(chapter: ChapterDraft): string {
     .replace(/[\\/:*?"<>|]/g, '-')
     .replace(/\s+/g, ' ')
   return `${safeTitle}.txt`
+}
+
+async function handleExportAllChaptersTxt(): Promise<void> {
+  if (appStore.chapters.length === 0) {
+    message.warning('暂无可导出的章节')
+    return
+  }
+
+  const result = await window.characterArc.exportText(toIpcPayload({
+    data: buildChaptersExportPayloadFromStore({
+      project: appStore.currentProject,
+      outlineVolumes: appStore.outlineVolumes,
+      chapters: appStore.chapters
+    }),
+    title: '导出全部章节 TXT',
+    defaultPath: `${buildChaptersExportFileStem(appStore.currentProject?.title)}.txt`
+  }))
+
+  if (result.success) {
+    message.success(`已导出 ${appStore.chapters.length} 章到 TXT`)
+    return
+  }
+
+  if (!result.canceled) {
+    message.error('导出章节 TXT 失败')
+  }
 }
 
 async function handleExportChapterTxt(chapter: ChapterDraft): Promise<void> {
@@ -207,35 +357,89 @@ function handleMenuSelect(key: string | number, chapter: ChapterDraft): void {
       </div>
       <n-tooltip trigger="hover" placement="bottom">
         <template #trigger>
-          <button class="icon-btn" @click="appStore.backToWorkbench()">
+          <button class="icon-btn" @click="appStore.backToOutline()">
             <ArrowLeft :size="14" />
           </button>
         </template>
-        返回工作台
+        返回剧情大纲
       </n-tooltip>
     </header>
 
     <div class="ts-toolbar">
-      <n-tooltip trigger="hover" placement="bottom">
-        <template #trigger>
-          <button class="icon-btn flex" @click="appStore.createOutlineVolume()"><FolderPlus :size="14" /></button>
-        </template>
-        新建分卷
-      </n-tooltip>
-      <n-tooltip trigger="hover" placement="bottom">
-        <template #trigger>
-          <button class="icon-btn flex" @click="openCreateDialog()"><FilePlus :size="14" /></button>
-        </template>
-        新建章节
-      </n-tooltip>
-      <n-tooltip trigger="hover" placement="bottom">
-        <template #trigger>
-          <button class="icon-btn flex" @click="toggleCollapseAll">
-            <ChevronsDownUp :size="14" />
-          </button>
-        </template>
-        {{ allCollapsed ? '展开全部' : '折叠全部' }}
-      </n-tooltip>
+      <template v-if="batchMode">
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button class="icon-btn flex" :class="{ active: allVisibleSelected }" @click="toggleSelectAllVisible">
+              <CheckSquare :size="14" />
+            </button>
+          </template>
+          {{ allVisibleSelected ? '取消全选' : '全选当前列表' }}
+        </n-tooltip>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button class="icon-btn flex danger" :disabled="!canBatchDelete" @click="confirmBatchDelete">
+              <Trash2 :size="14" />
+            </button>
+          </template>
+          删除所选{{ selectedChapterIds.length ? ` (${selectedChapterIds.length})` : '' }}
+        </n-tooltip>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button class="icon-btn flex active" @click="toggleBatchMode">
+              <Square :size="14" />
+            </button>
+          </template>
+          退出批量
+        </n-tooltip>
+      </template>
+      <template v-else>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button class="icon-btn flex" @click="appStore.createOutlineVolume()"><FolderPlus :size="14" /></button>
+          </template>
+          新建分卷
+        </n-tooltip>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button class="icon-btn flex" @click="openCreateDialog()"><FilePlus :size="14" /></button>
+          </template>
+          新建章节
+        </n-tooltip>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button
+              class="icon-btn flex"
+              :disabled="appStore.chapters.length === 0"
+              @click="titleBatchDialogVisible = true"
+            >
+              <Sparkles :size="14" />
+            </button>
+          </template>
+          AI 修改标题
+        </n-tooltip>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button class="icon-btn flex" :disabled="appStore.chapters.length === 0" @click="handleExportAllChaptersTxt">
+              <Download :size="14" />
+            </button>
+          </template>
+          导出全部章节 TXT
+        </n-tooltip>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button class="icon-btn flex" @click="toggleCollapseAll">
+              <ChevronsDownUp :size="14" />
+            </button>
+          </template>
+          {{ allCollapsed ? '展开全部' : '折叠全部' }}
+        </n-tooltip>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <button class="icon-btn flex" @click="toggleBatchMode"><CheckSquare :size="14" /></button>
+          </template>
+          批量管理
+        </n-tooltip>
+      </template>
     </div>
 
     <div class="ts-search">
@@ -251,6 +455,14 @@ function handleMenuSelect(key: string | number, chapter: ChapterDraft): void {
         :class="{ collapsed: collapsed[group.volume.id] }"
       >
         <button class="volume-head" @click="toggleVolume(group.volume.id)">
+          <n-checkbox
+            v-if="batchMode"
+            class="volume-check"
+            :checked="isVolumeFullySelected(group.volume.id)"
+            :indeterminate="isVolumePartiallySelected(group.volume.id)"
+            @click.stop
+            @update:checked="() => toggleVolumeSelection(group.volume.id)"
+          />
           <ChevronDown :size="13" class="chevron" />
           <span class="volume-title">{{ formatVolumeLabel(group.volume, group.index, 'compact') }}</span>
           <span class="volume-meta">{{ group.items.length }}</span>
@@ -261,21 +473,36 @@ function handleMenuSelect(key: string | number, chapter: ChapterDraft): void {
             v-for="chapter in group.items"
             :key="chapter.id"
             class="chapter-row"
-            :class="{ active: appStore.selectedChapterId === chapter.id }"
-            @click="appStore.selectChapter(chapter.id); emit('navigate')"
+            :class="{
+              active: !batchMode && appStore.selectedChapterId === chapter.id,
+              selected: batchMode && isChapterSelected(chapter.id)
+            }"
+            @click="handleChapterRowClick(chapter)"
           >
+            <n-checkbox
+              v-if="batchMode"
+              class="chap-check"
+              :checked="isChapterSelected(chapter.id)"
+              @click.stop
+              @update:checked="() => toggleChapterSelection(chapter.id)"
+            />
             <FileText :size="13" class="chap-icon" />
             <span class="chap-title">{{ chapter.title }}</span>
             <n-tag size="tiny" :type="statusType(chapter.status)" :bordered="false">
               {{ formatStatus(chapter.status) }}
             </n-tag>
-            <n-dropdown :options="chapterMenuOptions" placement="bottom-end" @select="(k) => handleMenuSelect(k, chapter)">
+            <n-dropdown
+              v-if="!batchMode"
+              :options="chapterMenuOptions"
+              placement="bottom-end"
+              @select="(k) => handleMenuSelect(k, chapter)"
+            >
               <span class="chap-more" @click.stop>
                 <MoreVertical :size="12" />
               </span>
             </n-dropdown>
           </button>
-          <button class="chapter-add" @click="openCreateDialog(group.volume.id)">
+          <button v-if="!batchMode" class="chapter-add" @click="openCreateDialog(group.volume.id)">
             <Plus :size="12" /> 新增章节
           </button>
         </div>
@@ -283,12 +510,20 @@ function handleMenuSelect(key: string | number, chapter: ChapterDraft): void {
     </div>
 
     <footer class="ts-footer">
-      <span>{{ totalVisible }} / {{ appStore.chapters.length }} 章 · {{ totalWords.toLocaleString() }} 字</span>
+      <span v-if="batchMode">
+        已选 {{ selectedChapterIds.length }} 章 · 可见 {{ totalVisible }} / {{ appStore.chapters.length }} 章
+      </span>
+      <span v-else>{{ totalVisible }} / {{ appStore.chapters.length }} 章 · {{ totalWords.toLocaleString() }} 字</span>
     </footer>
 
     <ChapterMetaDialog
       v-model:show="metaDialogVisible"
       :chapter="metaDialogChapter"
+    />
+
+    <ChapterTitleBatchDialog
+      v-model:show="titleBatchDialogVisible"
+      :volume-id="appStore.selectedChapter?.volumeId"
     />
 
     <NModal
@@ -384,6 +619,34 @@ function handleMenuSelect(key: string | number, chapter: ChapterDraft): void {
 }
 
 .icon-btn.flex { flex: 1; }
+
+.icon-btn.active {
+  background: var(--arc-primary-soft);
+  color: var(--arc-primary);
+}
+
+.icon-btn.danger {
+  color: var(--arc-danger, #d03050);
+}
+
+.icon-btn.danger:hover:not(:disabled) {
+  background: rgba(208, 48, 80, 0.1);
+  color: var(--arc-danger, #d03050);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.volume-check,
+.chap-check {
+  flex-shrink: 0;
+}
+
+.volume-check {
+  margin-right: -2px;
+}
 
 .ts-toolbar {
   display: flex;
@@ -493,6 +756,10 @@ function handleMenuSelect(key: string | number, chapter: ChapterDraft): void {
   background: var(--arc-primary-soft);
   border-left-color: var(--arc-primary);
   font-weight: 500;
+}
+
+.chapter-row.selected {
+  background: rgba(24, 160, 88, 0.08);
 }
 
 .chapter-row .chap-icon {

@@ -8,7 +8,7 @@ import { imageProviderOptions, resolveImageProviderDefaults } from '@/features/s
 import { useAppStore } from '@/stores/app'
 import { darkModePresets, themePresets } from '@/theme/presets'
 import { toIpcPayload } from '@/utils/ipcPayload'
-import type { AiProfile, AppSettings, DarkModeStyle, ThemeName } from '@/types/app'
+import type { AiProfile, AppSettings, ChapterProductionModels, DarkModeStyle, ThemeName } from '@/types/app'
 
 const props = defineProps<{
   show: boolean
@@ -53,6 +53,7 @@ const draftSettings = reactive<AppSettings>({
   topP: undefined,
   aiProfiles: [],
   activeAiProfileId: '',
+  chapterProductionModels: {},
   imageProvider: '',
   imageModel: '',
   imageApiKey: '',
@@ -109,9 +110,17 @@ const modelSelectOptions = computed(() =>
 const imageModelSelectOptions = computed(() =>
   fetchedImageModels.value.map((m) => ({ label: m.id, value: m.id }))
 )
+const productionProfileOptions = computed(() => [
+  { label: '使用当前激活配置', value: '' },
+  ...draftSettings.aiProfiles.map((profile) => ({
+    label: `${profile.name}${profile.model ? ` · ${profile.model}` : ''}`,
+    value: profile.id,
+  })),
+])
 const hasPendingChanges = computed(() =>
   draftTheme.value !== appStore.theme
   || JSON.stringify(draftSettings.aiProfiles) !== JSON.stringify(appStore.appSettings.aiProfiles)
+  || JSON.stringify(draftSettings.chapterProductionModels ?? {}) !== JSON.stringify(appStore.appSettings.chapterProductionModels ?? {})
   || draftSettings.imageProvider !== appStore.appSettings.imageProvider
   || draftSettings.imageModel !== appStore.appSettings.imageModel
   || draftSettings.imageApiKey !== appStore.appSettings.imageApiKey
@@ -132,6 +141,7 @@ function syncDraftFromStore(): void {
   draftSettings.topP = appStore.appSettings.topP
   draftSettings.aiProfiles = appStore.appSettings.aiProfiles.map((profile) => ({ ...profile }))
   draftSettings.activeAiProfileId = appStore.appSettings.activeAiProfileId
+  draftSettings.chapterProductionModels = { ...(appStore.appSettings.chapterProductionModels ?? {}) }
   draftSettings.imageProvider = appStore.appSettings.imageProvider
   draftSettings.imageModel = appStore.appSettings.imageModel
   draftSettings.imageApiKey = appStore.appSettings.imageApiKey
@@ -336,9 +346,25 @@ async function handleTestAiConnection(): Promise<void> {
   }
 }
 
+function updateProductionModel(
+  role: keyof ChapterProductionModels,
+  value: string | null,
+): void {
+  if (!draftSettings.chapterProductionModels) {
+    draftSettings.chapterProductionModels = {}
+  }
+  const id = String(value ?? '').trim()
+  if (id) {
+    draftSettings.chapterProductionModels[role] = id
+  } else {
+    delete draftSettings.chapterProductionModels[role]
+  }
+}
+
 async function saveSettings(): Promise<void> {
   appStore.updateAppSetting('aiProfiles', draftSettings.aiProfiles.map((profile) => ({ ...profile })))
   appStore.updateAppSetting('activeAiProfileId', draftSettings.activeAiProfileId)
+  appStore.updateAppSetting('chapterProductionModels', { ...(draftSettings.chapterProductionModels ?? {}) })
 
   const activeProfile = draftSettings.aiProfiles.find(p => p.id === draftSettings.activeAiProfileId)
   if (activeProfile) {
@@ -440,6 +466,36 @@ async function saveSettings(): Promise<void> {
               >
                 <Trash2 :size="14" />
               </button>
+            </div>
+          </div>
+
+          <div class="production-models-card">
+            <h4 class="production-models-title">章节生产分模型</h4>
+            <p class="production-models-hint">
+              自动创作流水线中，初稿、定点修复、质量审查可绑定不同接口。未选择时回退到标题栏当前激活配置。
+            </p>
+            <div class="settings-grid production-models-grid">
+              <n-form-item label="初稿（备忘 / 写作 / 日志）">
+                <n-select
+                  :options="productionProfileOptions"
+                  :value="draftSettings.chapterProductionModels?.draftProfileId ?? ''"
+                  @update:value="(value) => updateProductionModel('draftProfileId', value)"
+                />
+              </n-form-item>
+              <n-form-item label="定点修复">
+                <n-select
+                  :options="productionProfileOptions"
+                  :value="draftSettings.chapterProductionModels?.repairProfileId ?? ''"
+                  @update:value="(value) => updateProductionModel('repairProfileId', value)"
+                />
+              </n-form-item>
+              <n-form-item label="质量审查（质检 / 契约审计）">
+                <n-select
+                  :options="productionProfileOptions"
+                  :value="draftSettings.chapterProductionModels?.auditProfileId ?? ''"
+                  @update:value="(value) => updateProductionModel('auditProfileId', value)"
+                />
+              </n-form-item>
             </div>
           </div>
 
@@ -915,6 +971,32 @@ async function saveSettings(): Promise<void> {
 }
 
 /* ── Profile Tabs ── */
+.production-models-card {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--arc-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--arc-surface) 92%, transparent);
+}
+
+.production-models-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--arc-text-primary);
+}
+
+.production-models-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--arc-text-secondary);
+}
+
+.production-models-grid {
+  margin-bottom: 0;
+}
+
 .profile-tabs {
   display: flex;
   align-items: center;

@@ -34,8 +34,11 @@ export interface TaskHandler {
   defaultCapabilities: PromptCapabilityId[]
   /** 根据输入构建 system + user prompt 对 */
   buildPrompt(input: PromptBuildInput): PromptPair
-  /** 将 AI 原始输出解析为结构化结果 */
-  normalize(raw: string): AiTaskResult
+  /**
+   * 将 AI 原始输出解析为结构化结果。
+   * 可选传入 prompt 构建输入，用于需要对照上下文校验证据（如章节审查 ref 是否真实存在于正文）。
+   */
+  normalize(raw: string, input?: PromptBuildInput): AiTaskResult
   /** 校验解析后的结果是否符合预期结构 */
   validate(result: AiTaskResult): boolean
   /**

@@ -27,6 +27,30 @@ import { buildStoryStateContext, formatStoryStateForPrompt, applyStateDelta } fr
 import type { StateDelta } from '../../story-state-store'
 import { indexChapterSegments } from '../knowledge-retrieval'
 import { runLightCheck } from '../audit/light-check'
+import { applyTaskModelSettings } from '../../../shared/ai/model-roles'
+
+function routeTaskSettings(task: AiTaskPayload): AiTaskPayload {
+  const routed = applyTaskModelSettings(
+    task.settings as Parameters<typeof applyTaskModelSettings>[0],
+    task.task,
+  )
+  return { ...task, settings: routed as unknown as AppSettings }
+}
+
+function buildTaskLogMeta(task: AiTaskPayload): string[] {
+  const lines: string[] = []
+  const modelRole = (task.settings as { modelRole?: string }).modelRole
+  if (modelRole && modelRole !== 'default') lines.push(`模型角色: ${modelRole}`)
+  const autoCreationRunId = String(task.context.autoCreationRunId ?? '').trim()
+  if (autoCreationRunId) lines.push(`自动创作 runId: ${autoCreationRunId}`)
+  const projectId = String(task.context.projectId ?? '').trim()
+  if (projectId) lines.push(`项目ID: ${projectId}`)
+  const chapterId = String(task.context.chapterId ?? '').trim()
+  if (chapterId) lines.push(`章节ID: ${chapterId}`)
+  const chapterTitle = String(task.context.chapterTitle ?? '').trim()
+  if (chapterTitle) lines.push(`章节标题: ${chapterTitle}`)
+  return lines
+}
 
 /**
  * 执行一次完整的 AI 任务调用（非流式）。
@@ -41,6 +65,7 @@ export async function runAiTask(
   knowledgeContext?: AiTaskKnowledgeContext,
   signal?: AbortSignal
 ): Promise<AiTaskResponse> {
+  task = routeTaskSettings(task)
   const handler = getTaskHandler(task.task)
   // 白名单内的任务直接尝试走 agent loop，不预判 provider 能力。
   // 如果模型不支持 tool_use，运行时会抛错，在 catch 中降级或提示用户。
@@ -66,7 +91,8 @@ export async function runAiTask(
   const clientKey = task.clientKey
 
   const { projectId, skills, usedSkillIds } = await resolveTaskSkills(task)
-  logSelection(task.task, skills, knowledgeContext?.usedKnowledge ?? [])
+  const logMeta = buildTaskLogMeta(task)
+  logSelection(task.task, skills, knowledgeContext?.usedKnowledge ?? [], logMeta)
   await enrichTaskContextForGeneration(task, settings)
 
   const input = buildPromptInput(task, skills, knowledgeContext)
@@ -78,7 +104,7 @@ export async function runAiTask(
     throw new Error(`任务 ${handler.name} 缺少结构化输出 schema。`)
   }
 
-  logPrompt('REQUEST', settings, prompt, task.task, usedSkillIds)
+  logPrompt('REQUEST', settings, prompt, task.task, usedSkillIds, logMeta)
 
   const requestStartedAt = Date.now()
   let totalUsage: AiRunUsage | undefined
@@ -93,11 +119,11 @@ export async function runAiTask(
     )
     totalUsage = addAiRunUsage(totalUsage, generation.usage)
     let rawText = generation.text
-    logResponse('REQUEST', settings, task.task, rawText, Date.now() - requestStartedAt, { usedSkills: usedSkillIds })
+    logResponse('REQUEST', settings, task.task, rawText, Date.now() - requestStartedAt, { usedSkills: usedSkillIds, metaLines: logMeta })
     let result: AiTaskResult
     let normalizeFailed = false
     try {
-      result = handler.normalize(rawText)
+      result = handler.normalize(rawText, input)
     } catch {
       result = {} as AiTaskResult
       normalizeFailed = true
@@ -112,7 +138,7 @@ export async function runAiTask(
           ? handler.describeValidationErrors(result)
           : ['JSON 解析失败或结构不完整']
         const repairPromptPair = buildRepairPrompt(prompt.system, prompt.user, rawText, validationErrors)
-        logPrompt(`REPAIR_${attempt}`, settings, repairPromptPair, task.task, usedSkillIds)
+        logPrompt(`REPAIR_${attempt}`, settings, repairPromptPair, task.task, usedSkillIds, logMeta)
         const repairStartedAt = Date.now()
         generation = await aiGenerateTextWithUsage(
           settings,
@@ -123,10 +149,10 @@ export async function runAiTask(
         )
         totalUsage = addAiRunUsage(totalUsage, generation.usage)
         rawText = generation.text
-        logResponse(`REPAIR_${attempt}`, settings, task.task, rawText, Date.now() - repairStartedAt, { usedSkills: usedSkillIds })
+        logResponse(`REPAIR_${attempt}`, settings, task.task, rawText, Date.now() - repairStartedAt, { usedSkills: usedSkillIds, metaLines: logMeta })
         normalizeFailed = false
         try {
-          result = handler.normalize(rawText)
+          result = handler.normalize(rawText, input)
         } catch {
           result = {} as AiTaskResult
           normalizeFailed = true
@@ -177,7 +203,7 @@ export async function runAiTask(
   } catch (error) {
     const finishedAt = new Date().toISOString()
     const message = error instanceof Error ? error.message : 'AI 调用失败'
-    logError('REQUEST', settings, task.task, error, Date.now() - requestStartedAt, { usedSkills: usedSkillIds })
+    logError('REQUEST', settings, task.task, error, Date.now() - requestStartedAt, { usedSkills: usedSkillIds, metaLines: logMeta })
     throw Object.assign(new Error(message), {
       aiRunMeta: buildRunMeta(
         task.task,
@@ -214,13 +240,17 @@ export async function streamAiTask(
   signal: AbortSignal,
   knowledgeContext?: AiTaskKnowledgeContext
 ): Promise<AiTaskResponse> {
+  task = routeTaskSettings(task)
   if (
     task.task !== 'chapter-assistant'
     && task.task !== 'global-assistant'
     && task.task !== 'chapter-first-draft'
     && task.task !== 'chapter-memo'
+    && task.task !== 'chapter-brief'
     && task.task !== 'chapter-audit'
+    && task.task !== 'chapter-quality-review'
     && task.task !== 'chapter-repair'
+    && task.task !== 'chapter-final-polish'
     && task.task !== 'chapter-session-note'
   ) {
     throw new Error('当前流式输出仅支持章节创作助理、章节初稿、章节备忘、章节审计和章节修复。')
@@ -233,7 +263,8 @@ export async function streamAiTask(
 
   const taskHandler = getTaskHandler(task.task)
   const { projectId, skills, usedSkillIds } = await resolveTaskSkills(task)
-  logSelection(task.task, skills, knowledgeContext?.usedKnowledge ?? [])
+  const logMeta = buildTaskLogMeta(task)
+  logSelection(task.task, skills, knowledgeContext?.usedKnowledge ?? [], logMeta)
   await enrichTaskContextForGeneration(task, settings)
 
   const input = buildPromptInput(task, skills, knowledgeContext)
@@ -245,7 +276,7 @@ export async function streamAiTask(
     throw new Error(`任务 ${taskHandler.name} 缺少结构化输出 schema。`)
   }
 
-  logPrompt('STREAM', settings, prompt, task.task, usedSkillIds)
+  logPrompt('STREAM', settings, prompt, task.task, usedSkillIds, logMeta)
   const requestStartedAt = Date.now()
   let totalUsage: AiRunUsage | undefined
 
@@ -255,11 +286,15 @@ export async function streamAiTask(
       : await aiStreamTextWithUsage(settings, prompt, handlers, signal, maxTokens)
     totalUsage = addAiRunUsage(totalUsage, generation.usage)
     let rawText = generation.text
-    logResponse('STREAM', settings, task.task, rawText, Date.now() - requestStartedAt, { usedSkills: usedSkillIds })
+    logResponse('STREAM', settings, task.task, rawText, Date.now() - requestStartedAt, {
+      usedSkills: usedSkillIds,
+      metaLines: logMeta,
+      usage: generation.usage,
+    })
     let result: AiTaskResult
     let normalizeFailed = false
     try {
-      result = taskHandler.normalize(rawText)
+      result = taskHandler.normalize(rawText, input)
     } catch {
       result = {} as AiTaskResult
       normalizeFailed = true
@@ -271,7 +306,7 @@ export async function streamAiTask(
         ? taskHandler.describeValidationErrors(result)
         : ['JSON 解析失败或结构不完整']
       const repairPromptPair = buildRepairPrompt(prompt.system, prompt.user, rawText, validationErrors)
-      logPrompt('STREAM_REPAIR', settings, repairPromptPair, task.task, usedSkillIds)
+      logPrompt('STREAM_REPAIR', settings, repairPromptPair, task.task, usedSkillIds, logMeta)
       const repairStartedAt = Date.now()
       generation = await aiGenerateTextWithUsage(
         settings,
@@ -282,8 +317,8 @@ export async function streamAiTask(
       )
       totalUsage = addAiRunUsage(totalUsage, generation.usage)
       rawText = generation.text
-      logResponse('STREAM_REPAIR', settings, task.task, rawText, Date.now() - repairStartedAt, { usedSkills: usedSkillIds })
-      result = taskHandler.normalize(rawText)
+      logResponse('STREAM_REPAIR', settings, task.task, rawText, Date.now() - repairStartedAt, { usedSkills: usedSkillIds, metaLines: logMeta })
+      result = taskHandler.normalize(rawText, input)
       repairTriggered = true
 
       if (!taskHandler.validate(result)) {
@@ -327,7 +362,7 @@ export async function streamAiTask(
     const status = signal.aborted ? 'canceled' : 'error'
     const message = signal.aborted ? '' : (error instanceof Error ? error.message : 'AI 流式调用失败')
     if (!signal.aborted) {
-      logError('STREAM', settings, task.task, error, Date.now() - requestStartedAt, { usedSkills: usedSkillIds })
+      logError('STREAM', settings, task.task, error, Date.now() - requestStartedAt, { usedSkills: usedSkillIds, metaLines: logMeta })
     }
     throw Object.assign(new Error(message || 'AI 流式调用失败'), {
       aiRunMeta: buildRunMeta(
@@ -556,6 +591,10 @@ ${chapterContent}
     if (!parsed.characters_updated) parsed.characters_updated = []
     if (!parsed.relationships_delta) parsed.relationships_delta = []
     if (!parsed.foreshadowing_delta) parsed.foreshadowing_delta = { planted: [], advanced: [], resolved: [] }
+    const fs = parsed.foreshadowing_delta
+    if (!Array.isArray(fs.planted)) fs.planted = fs.planted ? [fs.planted as never] : []
+    if (!Array.isArray(fs.advanced)) fs.advanced = fs.advanced ? [fs.advanced as never] : []
+    if (!Array.isArray(fs.resolved)) fs.resolved = fs.resolved ? [fs.resolved as never] : []
     if (!parsed.timeline) parsed.timeline = { story_time_elapsed: '', current_story_date: '', events: [] }
     return { delta: parsed, rawText: raw, usage: generation.usage }
   } catch (error) {

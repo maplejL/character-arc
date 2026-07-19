@@ -1,6 +1,7 @@
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { AppSettings, AiRunKnowledgeItem, PromptPair } from '../shared-types'
+import type { AppSettings, AiRunKnowledgeItem, PromptPair, AiRunUsage } from '../shared-types'
+import { formatCacheUsageLine } from '../../../shared/auto-creation/cache-usage'
 import type { SkillSelection } from '../skills/types'
 
 /** 日志存放目录 */
@@ -8,13 +9,27 @@ const AI_PROMPT_LOG_DIR = join(process.cwd(), '.logs')
 /** AI 提示词日志文件路径 */
 const AI_PROMPT_LOG_FILE = join(AI_PROMPT_LOG_DIR, 'ai-prompts.log')
 
-/** 将内容追加写入提示词日志文件，写入失败时仅打印错误不抛出 */
+function resolveAppLogFile(): string | null {
+  const root = process.env.CHARACTERARC_APP_ROOT?.trim()
+  if (!root) return null
+  return join(root, 'app.log')
+}
+
+/** 将内容追加写入提示词日志文件；服务端同时写入 app.log */
 async function writePromptLogFile(content: string): Promise<void> {
   try {
     await mkdir(AI_PROMPT_LOG_DIR, { recursive: true })
     await appendFile(AI_PROMPT_LOG_FILE, `${content}\n`, 'utf8')
   } catch (error) {
     console.error('[ai] failed to write prompt log file:', error)
+  }
+
+  const appLog = resolveAppLogFile()
+  if (!appLog) return
+  try {
+    await appendFile(appLog, `${content}\n`, 'utf8')
+  } catch (error) {
+    console.error('[ai] failed to write app.log:', error)
   }
 }
 
@@ -31,7 +46,8 @@ export function logPrompt(
   settings: AppSettings,
   prompt: PromptPair,
   taskName: string,
-  usedSkills?: string[]
+  usedSkills?: string[],
+  metaLines?: string[],
 ): void {
   const provider = settings.provider || 'unknown'
   const model = settings.model || 'unknown'
@@ -44,6 +60,7 @@ export function logPrompt(
     `任务: ${taskName}`,
     `提供者: ${provider}`,
     `模型: ${model}`,
+    ...(metaLines ?? []),
     skillLine,
     '--- SYSTEM ---',
     prompt.system || '',
@@ -64,7 +81,8 @@ export function logPrompt(
 export function logSelection(
   taskName: string,
   skills: SkillSelection[],
-  knowledge: AiRunKnowledgeItem[]
+  knowledge: AiRunKnowledgeItem[],
+  metaLines?: string[],
 ): void {
   const timestamp = new Date().toISOString()
   const skillLines = skills.length
@@ -88,6 +106,7 @@ export function logSelection(
     `===== AI 选择 SELECTION =====`,
     `时间: ${timestamp}`,
     `任务: ${taskName}`,
+    ...(metaLines ?? []),
     '--- 选中的 SKILL ---',
     ...skillLines,
     '--- 检索到的知识 ---',
@@ -109,12 +128,13 @@ export function logResponse(
   taskName: string,
   rawText: string,
   durationMs: number,
-  extra?: { usedSkills?: string[] }
+  extra?: { usedSkills?: string[]; metaLines?: string[]; usage?: AiRunUsage },
 ): void {
   const provider = settings.provider || 'unknown'
   const model = settings.model || 'unknown'
   const timestamp = new Date().toISOString()
   const skillLine = extra?.usedSkills?.length ? `技能: ${extra.usedSkills.join(', ')}` : ''
+  const cacheLine = extra?.usage ? formatCacheUsageLine(extra.usage) : ''
   const previewSource = (rawText || '').replace(/\s+/g, ' ').trim()
   const preview = previewSource.length > 200 ? `${previewSource.slice(0, 200)}…` : previewSource
   const content = [
@@ -126,6 +146,8 @@ export function logResponse(
     `模型: ${model}`,
     `耗时: ${durationMs}ms`,
     `字数: ${rawText.length}`,
+    ...(extra?.metaLines ?? []),
+    cacheLine,
     skillLine,
     '--- BODY ---',
     rawText || '（空响应）',
@@ -148,7 +170,7 @@ export function logError(
   taskName: string,
   error: unknown,
   durationMs: number,
-  extra?: { usedSkills?: string[] }
+  extra?: { usedSkills?: string[]; metaLines?: string[] },
 ): void {
   const provider = settings.provider || 'unknown'
   const model = settings.model || 'unknown'
@@ -165,6 +187,7 @@ export function logError(
     `提供者: ${provider}`,
     `模型: ${model}`,
     `耗时: ${durationMs}ms`,
+    ...(extra?.metaLines ?? []),
     skillLine,
     '--- ERROR ---',
     message,

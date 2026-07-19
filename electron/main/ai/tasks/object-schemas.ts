@@ -120,6 +120,18 @@ const taskObjectSchemas: Partial<Record<AiTaskName, z.ZodTypeAny>> = {
       }))
     })
   }),
+  'chapter-quality-review': z.object({
+    review: z.object({
+      pass: z.boolean(),
+      issues: z.array(z.object({
+        severity: z.enum(['critical', 'warning', 'hint']),
+        category: stringField,
+        ref: stringField,
+        hint: stringField,
+        repairAction: stringField.optional()
+      }))
+    })
+  }),
   'chapter-memo': z.object({
     memo: z.object({
       currentTask: stringField,
@@ -129,8 +141,19 @@ const taskObjectSchemas: Partial<Record<AiTaskName, z.ZodTypeAny>> = {
       transitionFunctions: stringField,
       decisionChecks: stringList,
       endingChanges: stringList,
-      doNotDo: stringList
+      doNotDo: stringList,
+      emotionArc: stringField.optional(),
+      partScopedTask: stringField.optional(),
+      mustDifferentiateFrom: stringList.optional(),
+      requiredStake: stringField.optional(),
     })
+  }),
+  'chapter-session-note': z.object({
+    sessionNote: z.object({
+      craftDecisions: stringField,
+      effectiveReferences: stringField,
+      nextChapterAdvice: stringField,
+    }),
   }),
   'chapter-scene-plan': z.object({
     scenes: z.array(z.object({
@@ -163,6 +186,37 @@ const taskObjectSchemas: Partial<Record<AiTaskName, z.ZodTypeAny>> = {
   'project-bootstrap': z.object({
     worldviewEntries: z.array(worldviewEntrySchema),
     outlineItems: z.array(outlineItemSchema)
+  }),
+  'continuation-reverse-extract': z.object({
+    worldviewEntries: z.array(worldviewEntrySchema),
+    characters: z.array(z.object({
+      name: stringField,
+      role: stringField,
+      description: stringField,
+      tags: stringList
+    })),
+    characterRelationships: z.array(z.object({
+      fromName: stringField,
+      toName: stringField,
+      type: stringField,
+      description: stringField,
+      intensity: z.number()
+    })),
+    outlineVolumes: z.array(z.object({
+      title: stringField,
+      summary: stringField,
+      wordTarget: stringField.optional()
+    })),
+    outlineItems: z.array(z.object({
+      volumeTitle: stringField,
+      title: stringField,
+      wordTarget: stringField,
+      conflict: stringField,
+      summary: stringField,
+      chapterFrom: z.number().optional(),
+      chapterTo: z.number().optional()
+    })),
+    warnings: stringList.optional()
   }),
   'inspiration-pack': z.object({
     entries: z.array(z.object({
@@ -294,6 +348,13 @@ const taskObjectSchemas: Partial<Record<AiTaskName, z.ZodTypeAny>> = {
     role: stringField.optional(),
     notes: stringField.optional(),
     intensity: z.number().optional()
+  }),
+  'chapter-title-batch': z.object({
+    suggestion: stringField,
+    entries: z.array(z.object({
+      index: z.number(),
+      title: stringField
+    }))
   })
 }
 

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { ChevronDown, FilePlus2, GripVertical, MoreVertical, Plus, Rows3, Sparkles } from 'lucide-vue-next'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { ChevronDown, FilePlus2, GripVertical, MoreVertical, Play, Plus, Rows3, Sparkles } from 'lucide-vue-next'
 import { NButton, NDropdown, NForm, NFormItem, NInput, NModal, NSelect, useDialog, useMessage } from 'naive-ui'
 import { getChapterCharacterCount } from '@/features/chapters/editorContent'
+import { normalizeChapterWordTarget } from '@/features/chapters/wordTarget'
 import { loadEnabledProjectSkillsContext } from '@/features/projectSkills/context'
 import { useAppStore } from '@/stores/app'
 import { buildProjectWritingStyleContext } from '@/features/writingStyles/presets'
@@ -12,12 +13,17 @@ import type { DropdownOption, SelectOption } from 'naive-ui'
 import type { OutlineItem, OutlineItemStatus, OutlineVolume } from '@/types/app'
 import AiEnhancePreview from './AiEnhancePreview.vue'
 import type { EnhanceFieldDiff } from './AiEnhancePreview.vue'
+import { useAutoCreationRunner } from '@/features/autoCreation/useAutoCreationRunner'
+import AutoCreationLogPanel from './AutoCreationLogPanel.vue'
+import AutoCreationConfigDialog from './AutoCreationConfigDialog.vue'
+import type { AutoCreationConfig } from '@/features/autoCreation/types'
 
 const props = defineProps<{
   searchQuery?: string // 全局搜索关键词
 }>()
 
 const appStore = useAppStore()
+const autoCreation = useAutoCreationRunner()
 const dialog = useDialog()
 const message = useMessage()
 const writingStyle = computed(() => buildProjectWritingStyleContext(appStore.currentProject))
@@ -35,6 +41,77 @@ function isExpandingVolume(volumeId: string): boolean {
 const isAnyVolumeExpanding = computed(() =>
   appStore.outlineVolumes.some((volume) => isExpandingVolume(volume.id))
 )
+function isAutoCreatingVolume(volumeId: string): boolean {
+  return autoCreation.isRunning.value && autoCreation.activeRun.value?.volumeId === volumeId
+}
+
+function canResumeAutoCreation(volumeId: string): boolean {
+  const run = autoCreation.activeRun.value
+  return Boolean(run && run.volumeId === volumeId && autoCreation.canResume.value)
+}
+
+function readAutoCreationMaxChapters(): number | undefined {
+  const m = window.location.hash.match(/autocreation-max=(\d+)/)
+  if (!m) return undefined
+  const n = Number(m[1])
+  return Number.isFinite(n) && n > 0 ? n : undefined
+}
+
+const autoCreationConfigVisible = ref(false)
+const pendingAutoCreationVolume = ref<OutlineVolume | null>(null)
+
+function openAutoCreationConfig(volume: OutlineVolume): void {
+  if (autoCreation.isRunning.value) {
+    message.warning('已有自动创作任务在运行')
+    return
+  }
+  pendingAutoCreationVolume.value = volume
+  autoCreationConfigVisible.value = true
+}
+
+async function handleAutoCreationConfigConfirm(config: Partial<AutoCreationConfig>): Promise<void> {
+  autoCreationConfigVisible.value = false
+  const volume = pendingAutoCreationVolume.value
+  pendingAutoCreationVolume.value = null
+  if (!volume) return
+  try {
+    const maxChapters = config.maxChapters ?? readAutoCreationMaxChapters()
+    await autoCreation.startVolumeAutoCreation(volume.id, {
+      ...config,
+      ...(maxChapters ? { maxChapters } : {}),
+    })
+    if (autoCreation.activeRun.value?.status === 'completed') {
+      message.success(`《${volume.title}》自动创作已完成，请 review 各章节`)
+    }
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '自动创作启动失败')
+  }
+}
+
+function handleAutoCreationConfigCancel(): void {
+  autoCreationConfigVisible.value = false
+  pendingAutoCreationVolume.value = null
+}
+
+async function handleStartAutoCreation(volume: OutlineVolume): Promise<void> {
+  openAutoCreationConfig(volume)
+}
+
+async function handleResumeAutoCreation(volume: OutlineVolume): Promise<void> {
+  try {
+    await autoCreation.resumeRun()
+    if (autoCreation.activeRun.value?.status === 'completed') {
+      message.success(`《${volume.title}》自动创作已完成，请 review 各章节`)
+    }
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '继续自动创作失败')
+  }
+}
+
+onMounted(() => {
+  void autoCreation.hydrateFromStorage()
+})
+
 const editorVisible = ref(false) // 控制大纲节点编辑弹窗
 const volumeEditorVisible = ref(false) // 控制分卷编辑弹窗
 const editingOutlineId = ref<string | null>(null) // 当前编辑的大纲节点 ID
@@ -162,7 +239,9 @@ async function handleExpandOutline(): Promise<void> {
     appStore.createOutlineItem({
       volumeId: fallbackVolumeId,
       title: item.title ?? `第${appStore.outlineItems.length + 1}章：新剧情节点`,
-      wordTarget: String(Math.min(Number((item.wordTarget ?? '3000').replace(/\D/g, '')) || 3000, 3500)),
+      wordTarget: normalizeChapterWordTarget(item.wordTarget, {
+        siblingWordTargets: appStore.outlineItems.map((node) => node.wordTarget),
+      }),
       conflict: item.conflict ?? '新的冲突正在酝酿。',
       summary: item.summary ?? 'AI 未返回有效剧情摘要',
       status: 'planned'
@@ -247,7 +326,13 @@ async function handleExpandVolumeOutline(volume: OutlineVolume): Promise<void> {
       appStore.createOutlineItem({
         volumeId: volume.id,
         title: entry.title,
-        wordTarget: entry.wordTarget ? String(Math.min(Number(entry.wordTarget.replace(/\D/g, '')) || 3000, 3500)) : undefined,
+        wordTarget: entry.wordTarget
+          ? normalizeChapterWordTarget(entry.wordTarget, {
+              siblingWordTargets: appStore.outlineItems
+                .filter((node) => node.volumeId === volume.id)
+                .map((node) => node.wordTarget),
+            })
+          : undefined,
         conflict: entry.conflict,
         summary: entry.summary,
         status: 'planned'
@@ -309,7 +394,13 @@ function submitOutline(): void {
     return
   }
 
-  const payload = { ...form, wordTarget: form.wordTarget.replace(/\D/g, '') }
+  const siblingWordTargets = appStore.outlineItems
+    .filter((node) => node.volumeId === form.volumeId && node.id !== editingOutlineId.value)
+    .map((node) => node.wordTarget)
+  const payload = {
+    ...form,
+    wordTarget: normalizeChapterWordTarget(form.wordTarget, { siblingWordTargets }),
+  }
 
   if (editingOutlineId.value) {
     appStore.updateOutlineItem(editingOutlineId.value, payload)
@@ -358,7 +449,7 @@ function openLinkedChapter(item: OutlineItem): void {
     return
   }
 
-  appStore.openChapterStudio(chapter.id)
+  appStore.openChapterStudio(chapter.id, 'outline')
 }
 
 function resolveOutlineStatusMeta(status: OutlineItemStatus): { label: string; tone: string } {
@@ -685,10 +776,65 @@ watch(
             <n-button size="small" secondary :disabled="isAnyVolumeExpanding" @click="handleExpandVolumeOutline(group.volume)">
               {{ isExpandingVolume(group.volume.id) ? '补全中...' : 'AI补本卷' }}
             </n-button>
+            <n-button
+              v-if="canResumeAutoCreation(group.volume.id)"
+              size="small"
+              type="warning"
+              @click="handleResumeAutoCreation(group.volume)"
+            >
+              继续自动创作
+            </n-button>
+            <n-button
+              v-else
+              size="small"
+              type="info"
+              :disabled="isAutoCreatingVolume(group.volume.id) || isAnyVolumeExpanding"
+              :data-testid="group.index === 0 ? 'auto-creation-start-volume-1' : undefined"
+              @click="handleStartAutoCreation(group.volume)"
+            >
+              <template #icon><Play :size="12" /></template>
+              {{ isAutoCreatingVolume(group.volume.id) ? '创作中...' : '自动创作本卷' }}
+            </n-button>
             <n-button size="small" type="primary" @click="handleCreateOutline(group.volume.id)">
               <template #icon><Plus :size="12" /></template>
               新增节点
             </n-button>
+          </div>
+          <div
+            v-if="autoCreation.activeRun.value?.volumeId === group.volume.id && autoCreation.showRunPanel.value"
+            class="auto-creation-panel"
+          >
+            <div class="auto-creation-banner">
+              <span>{{ autoCreation.progressLabel.value || '自动创作准备中...' }}</span>
+              <div class="auto-creation-actions">
+                <n-button
+                  v-if="autoCreation.isRunning.value"
+                  size="tiny"
+                  secondary
+                  @click="void autoCreation.pauseRun()"
+                >
+                  暂停
+                </n-button>
+                <n-button
+                  v-else-if="autoCreation.canResume.value"
+                  size="tiny"
+                  type="primary"
+                  @click="handleResumeAutoCreation(group.volume)"
+                >
+                  继续
+                </n-button>
+                <n-button size="tiny" quaternary @click="void autoCreation.stopRun()">停止</n-button>
+                <n-button
+                  v-if="!autoCreation.isRunning.value && (autoCreation.activeRun.value?.status === 'completed' || autoCreation.activeRun.value?.status === 'paused')"
+                  size="tiny"
+                  quaternary
+                  @click="autoCreation.clearRun()"
+                >
+                  关闭
+                </n-button>
+              </div>
+            </div>
+            <AutoCreationLogPanel :entries="autoCreation.logEntries.value" />
           </div>
         </div>
 
@@ -755,6 +901,14 @@ watch(
     </div>
 
     <div v-else class="arc-empty-state">没有匹配"{{ props.searchQuery }}"的大纲节点。</div>
+
+    <AutoCreationConfigDialog
+      :show="autoCreationConfigVisible"
+      :volume-id="pendingAutoCreationVolume?.id"
+      :volume-title="pendingAutoCreationVolume?.title"
+      @confirm="handleAutoCreationConfigConfirm"
+      @cancel="handleAutoCreationConfigCancel"
+    />
 
     <!-- 编辑弹窗保持不变 -->
     <n-modal
@@ -1174,6 +1328,28 @@ watch(
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.auto-creation-panel {
+  margin: 8px 0 0 28px;
+}
+
+.auto-creation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--arc-primary) 10%, var(--arc-surface));
+  border: 1px solid color-mix(in srgb, var(--arc-primary) 24%, var(--arc-border));
+  font-size: 13px;
+}
+
+.auto-creation-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* ── 时间线节点 ── */

@@ -121,6 +121,7 @@ export type ChapterFirstDraftContextInput = {
   chapterContent: string
   targetWordCount: number
   userPrompt: string
+  chapterBrief?: string
   chapterMemo?: {
     currentTask: string
     readerExpectation: string
@@ -138,6 +139,7 @@ export type ChapterFirstDraftContextInput = {
     endingText: string
   }
   referenceStyleContext?: string
+  draftGuardsBlock?: string
 }
 
 // 构建发送给 AI 的章节助理上下文对象：
@@ -349,9 +351,11 @@ export function buildChapterFirstDraftContext(input: ChapterFirstDraftContextInp
     })),
     projectSkills: input.projectSkills ?? [],
     userPrompt: input.userPrompt,
+    chapterBrief: input.chapterBrief?.trim() || undefined,
     chapterMemo: input.chapterMemo ?? null,
     recentEndingsTrail: input.recentEndingsTrail ?? [],
     previousChapterHandoff: input.previousChapterHandoff ?? null,
-    referenceStyleContext: input.referenceStyleContext ?? ''
+    referenceStyleContext: input.referenceStyleContext ?? '',
+    draftGuardsBlock: input.draftGuardsBlock ?? '',
   }
 }

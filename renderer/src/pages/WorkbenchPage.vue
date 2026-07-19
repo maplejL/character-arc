@@ -39,6 +39,89 @@ import type { PanelName } from '@/types/app'
 
 const appStore = useAppStore()
 
+const CONTINUATION_BREAKPOINT_LABEL = 'continuation-breakpoint'
+
+type ContinuationBreakpointView = {
+  completedThroughIndex: number
+  lastChapterPartial: boolean
+  sourceSummary: string
+  volumeId: string
+  nextChapterId: string | null
+}
+
+const continuationBreakpoint = computed<ContinuationBreakpointView | null>(() => {
+  const projectId = appStore.currentProject?.id
+  if (!projectId) return null
+  const doc = appStore.knowledgeDocuments.find(
+    (item) =>
+      item.sourceLabel === CONTINUATION_BREAKPOINT_LABEL
+      && String(item.metadata?.projectId ?? '') === projectId,
+  )
+  if (!doc?.metadata) return null
+  const meta = doc.metadata
+  return {
+    completedThroughIndex: Number(meta.completedThroughIndex ?? 0),
+    lastChapterPartial: Boolean(meta.lastChapterPartial),
+    sourceSummary: String(meta.sourceSummary ?? doc.summary ?? ''),
+    volumeId: String(meta.volumeId ?? ''),
+    nextChapterId: meta.nextChapterId == null ? null : String(meta.nextChapterId),
+  }
+})
+
+const continuationBannerDismissed = ref(false)
+const continuationBannerVisible = computed(
+  () => Boolean(continuationBreakpoint.value) && !continuationBannerDismissed.value,
+)
+const reverseExtractRunning = ref(false)
+const reverseExtractMessage = ref('')
+
+function openContinuationOutline(): void {
+  appStore.setPanel('outline')
+}
+
+function openContinuationKnowledge(): void {
+  appStore.setPanel('project-knowledge')
+}
+
+function openContinuationCharacters(): void {
+  appStore.setPanel('characters')
+}
+
+function dismissContinuationBanner(): void {
+  continuationBannerDismissed.value = true
+}
+
+async function runContinuationReverseExtract(): Promise<void> {
+  const projectId = appStore.currentProject?.id
+  if (!projectId || reverseExtractRunning.value) return
+  if (typeof window.characterArc?.reverseExtractContinuation !== 'function') {
+    reverseExtractMessage.value = '当前环境不支持反推设定'
+    return
+  }
+  reverseExtractRunning.value = true
+  reverseExtractMessage.value = '正在从正文反推大纲/角色/世界观…'
+  try {
+    const response = await window.characterArc.reverseExtractContinuation({
+      projectId,
+      rebuildImportedOutline: true,
+    })
+    if (!response?.success) {
+      reverseExtractMessage.value = response?.error || response?.message || '反推失败'
+      return
+    }
+    await appStore.initialize()
+    appStore.openProject(projectId)
+    const counts = (response.result as { counts?: Record<string, number> } | undefined)?.counts
+    reverseExtractMessage.value = counts
+      ? `反推完成：角色 ${counts.characters ?? 0} · 关系 ${counts.relationships ?? 0} · 大纲 ${counts.outlineItems ?? 0} · 世界观 ${counts.worldview ?? 0}`
+      : '反推完成，请查看角色/大纲/世界观面板'
+  } catch (error) {
+    reverseExtractMessage.value = error instanceof Error ? error.message : '反推失败'
+  } finally {
+    reverseExtractRunning.value = false
+  }
+}
+
 // 侧边栏展开/收起状态
 const isSidebarOpen = ref(true)
 // 当前视口宽度，用于响应式判断侧边栏模式
@@ -296,7 +379,7 @@ watch(searchKeyword, (value) => {
 </script>
 
 <template>
-  <section class="workspace">
+  <section class="workspace" data-testid="workbench-page">
     <aside class="sidebar" :class="{ collapsed: !isSidebarOpen || isCompactSidebar }">
       <div class="sidebar-top">
         <button type="button" class="top-icon" title="返回项目中心" @click="appStore.backToProjects()">
@@ -367,6 +450,43 @@ watch(searchKeyword, (value) => {
     </aside>
 
     <main class="main-shell">
+      <div
+        v-if="continuationBannerVisible && continuationBreakpoint"
+        class="continuation-banner"
+        data-testid="continuation-banner"
+      >
+        <div class="continuation-banner__copy">
+          <strong>作品续写模式</strong>
+          <span>
+            已导入至第 {{ continuationBreakpoint.completedThroughIndex }} 章
+            <template v-if="continuationBreakpoint.lastChapterPartial">（末章为残稿）</template>
+            · {{ continuationBreakpoint.sourceSummary || '原稿导入' }}
+          </span>
+          <span class="continuation-banner__hint">
+            已导入章自动跳过验收；在「剧情大纲」对「续写（待写）」节点点「自动创作本卷」继续写。
+            可先「反推设定」补全角色/大纲/世界观，再续写。
+          </span>
+          <span v-if="reverseExtractMessage" class="continuation-banner__status">
+            {{ reverseExtractMessage }}
+          </span>
+        </div>
+        <div class="continuation-banner__actions">
+          <n-button
+            size="tiny"
+            type="primary"
+            secondary
+            :loading="reverseExtractRunning"
+            data-testid="continuation-reverse-extract"
+            @click="runContinuationReverseExtract"
+          >
+            反推设定
+          </n-button>
+          <n-button size="tiny" secondary @click="openContinuationOutline">去大纲</n-button>
+          <n-button size="tiny" secondary @click="openContinuationCharacters">去角色</n-button>
+          <n-button size="tiny" secondary @click="openContinuationKnowledge">状态补录</n-button>
+          <n-button size="tiny" quaternary @click="dismissContinuationBanner">关闭</n-button>
+        </div>
+      </div>
       <header class="workspace-header">
         <div class="breadcrumb">
           <span>项目工作台</span>
@@ -464,6 +584,45 @@ watch(searchKeyword, (value) => {
 </template>
 
 <style scoped>
+.continuation-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 16px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #0ea5e9 35%, transparent);
+  background: color-mix(in srgb, #0ea5e9 12%, var(--arc-bg-body));
+}
+.continuation-banner__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.continuation-banner__copy strong {
+  font-size: 13px;
+}
+.continuation-banner__hint {
+  color: var(--arc-text-secondary, #64748b);
+  font-size: 12px;
+}
+.continuation-banner__status {
+  font-size: 12px;
+  color: var(--primary, #38bdf8);
+}
+.continuation-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .workspace {
   display: flex;
   flex: 1;

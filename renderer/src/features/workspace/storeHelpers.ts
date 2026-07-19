@@ -8,6 +8,7 @@ import type {
   AiProfile,
   AiRunRecord,
   AppSettings,
+  ChapterProductionModels,
   ChapterAssistantPromptTemplate,
   ChapterDraft,
   ChapterVersion,
@@ -229,11 +230,12 @@ export function normalizeReferenceWorks(works?: ReferenceWorkItem[] | null): Ref
 // 默认应用设置：5分钟自动保存，API 信息由用户在设置中填写
 export const defaultAppSettings: AppSettings = {
   provider: 'deepseek',
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-flash',
   apiKey: '',
   baseUrl: 'https://api.deepseek.com/v1',
   aiProfiles: [],
   activeAiProfileId: '',
+  chapterProductionModels: {},
   imageProvider: '',
   imageModel: '',
   imageApiKey: '',
@@ -340,6 +342,20 @@ function normalizeAiProfile(profile: AiProfile): AiProfile {
   }
 }
 
+function normalizeChapterProductionModels(raw: unknown): ChapterProductionModels {
+  if (!raw || typeof raw !== 'object') return {}
+  const source = raw as Record<string, unknown>
+  const pick = (key: keyof ChapterProductionModels) => {
+    const value = String(source[key] ?? '').trim()
+    return value || undefined
+  }
+  return {
+    draftProfileId: pick('draftProfileId'),
+    repairProfileId: pick('repairProfileId'),
+    auditProfileId: pick('auditProfileId'),
+  }
+}
+
 export function normalizeAppSettings(settings?: Partial<AppSettings> | null): AppSettings {
   const source = settings ?? {}
   const provider = sanitizeSettingString(source.provider, defaultAppSettings.provider)
@@ -373,6 +389,7 @@ export function normalizeAppSettings(settings?: Partial<AppSettings> | null): Ap
     topP,
     aiProfiles,
     activeAiProfileId,
+    chapterProductionModels: normalizeChapterProductionModels(source.chapterProductionModels),
     imageProvider: sanitizeSettingString(source.imageProvider, defaultAppSettings.imageProvider),
     imageModel: sanitizeSettingString(source.imageModel, defaultAppSettings.imageModel),
     imageApiKey: sanitizeSettingString(source.imageApiKey, defaultAppSettings.imageApiKey),

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ChevronRight, Folder, FocusIcon, History, Maximize2, Menu, MessageSquareQuote, Minus, Minimize2, Plus, RefreshCw, Sparkles, Wand2 } from 'lucide-vue-next'
+import { ChevronRight, Folder, FocusIcon, History, Maximize2, Menu, MessageSquareQuote, Minus, Minimize2, Plus, RefreshCw, Sparkles, Wand2, ArrowLeft } from 'lucide-vue-next'
 import { NAlert, NTag, NTooltip } from 'naive-ui'
 import SimpleChapterEditor from './SimpleChapterEditor.vue'
 import ChapterVersionDialog from './ChapterVersionDialog.vue'
+import ChapterTitleBatchDialog from './ChapterTitleBatchDialog.vue'
 import EditorFindBar from './EditorFindBar.vue'
 import EditorContextMenu from './EditorContextMenu.vue'
 import { getChapterCharacterCount } from '@/features/chapters/editorContent'
@@ -31,6 +32,7 @@ const FONT_LEVELS = [14, 15, 16, 17, 18, 20, 22]
 const fontIdx = ref(3)
 const fontSize = computed(() => FONT_LEVELS[fontIdx.value])
 const versionDialogVisible = ref(false)
+const titleBatchVisible = ref(false)
 
 function stepFont(delta: number): void {
   const next = Math.max(0, Math.min(FONT_LEVELS.length - 1, fontIdx.value + delta))
@@ -267,14 +269,20 @@ onBeforeUnmount(() => {
 <template>
   <main class="editor-pane">
     <header v-if="!focusMode" class="ep-header">
-      <button v-if="showSidebarToggle" class="toolbtn sidebar-toggle" @click="emit('toggleSidebar')">
-        <Menu :size="14" />
-      </button>
-      <div class="breadcrumb">
+      <div class="ep-header-left">
+        <button class="back-outline-btn" type="button" @click="appStore.backToOutline()">
+          <ArrowLeft :size="14" />
+          <span>返回剧情大纲</span>
+        </button>
+        <button v-if="showSidebarToggle" class="toolbtn sidebar-toggle" @click="emit('toggleSidebar')">
+          <Menu :size="14" />
+        </button>
+        <div class="breadcrumb">
         <Folder :size="13" />
         <span>{{ volumeLabel }}</span>
         <ChevronRight :size="12" />
         <span class="crumb-current">{{ currentChapter?.title || '未命名章节' }}</span>
+        </div>
       </div>
 
       <div class="ep-actions">
@@ -307,6 +315,10 @@ onBeforeUnmount(() => {
         <button class="toolbtn" :disabled="!currentChapter" @click="emit('generateDraft')">
           <Wand2 :size="13" />
           <span>生成初稿</span>
+        </button>
+        <button class="toolbtn" :disabled="!currentChapter" @click="titleBatchVisible = true">
+          <Sparkles :size="13" />
+          <span>AI 改标题</span>
         </button>
         <button class="toolbtn" :class="{ primary: !aiOpen, active: aiOpen }" @click="emit('toggleAi')">
           <Sparkles :size="13" />
@@ -435,6 +447,11 @@ onBeforeUnmount(() => {
       v-model:show="versionDialogVisible"
       :chapter="currentChapter ?? null"
     />
+
+    <ChapterTitleBatchDialog
+      v-model:show="titleBatchVisible"
+      :volume-id="currentChapter?.volumeId"
+    />
   </main>
 </template>
 
@@ -459,6 +476,35 @@ onBeforeUnmount(() => {
   gap: 12px;
   background: var(--arc-bg-surface);
   border-bottom: 1px solid var(--arc-border);
+}
+
+.ep-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.back-outline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--arc-radius-sm);
+  background: transparent;
+  color: var(--arc-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.back-outline-btn:hover {
+  background: var(--arc-bg-surface-hover);
+  color: var(--arc-primary);
 }
 
 .breadcrumb {

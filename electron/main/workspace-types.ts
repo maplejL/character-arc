@@ -1,4 +1,5 @@
 import type { ReferenceStyleMetric } from './referenceAnalysis'
+import { normalizeChapterProductionModels, type ChapterProductionModels } from '../shared/ai/model-roles'
 
 export type KnowledgeDocumentSourceType =
   | 'reference-summary'
@@ -324,6 +325,7 @@ export type WorkspacePayload = {
       topP?: number
     }>
     activeAiProfileId: string
+    chapterProductionModels?: ChapterProductionModels
     imageProvider: string
     imageModel: string
     imageApiKey: string
@@ -495,6 +497,7 @@ export function normalizeAppSettings(
           .filter((item) => item.id)
       : [],
     activeAiProfileId: typeof settings?.activeAiProfileId === 'string' ? settings.activeAiProfileId : '',
+    chapterProductionModels: normalizeChapterProductionModels(settings?.chapterProductionModels),
     imageProvider: settings?.imageProvider || '',
     imageModel: settings?.imageModel || '',
     imageApiKey: settings?.imageApiKey || '',

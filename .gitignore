@@ -8,6 +8,9 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!.env.*.example
 
 # Build outputs
 dist/
@@ -17,6 +20,16 @@ build/*
 !build/entitlements.mac.plist
 out/
 dist-electron/
+
+# TypeScript emit beside electron sources (tools/emit-electron-ai.mjs; deploy regenerates)
+electron/main/**/*.js
+electron/main/**/*.d.ts
+electron/shared/**/*.js
+electron/shared/**/*.d.ts
+
+# Web e2e artifacts
+web/playwright-report/
+web/test-results/
 
 # Logs
 *.log

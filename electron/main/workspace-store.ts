@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { join } from 'node:path'
 import { mkdir, readFile } from 'node:fs/promises'
 import { DatabaseSync } from 'node:sqlite'
@@ -29,11 +30,54 @@ function getWorkspaceFilePath(): string {
 }
 
 function getWorkspaceDbPath(): string {
+  if (dbPathOverride) return dbPathOverride
   return join(getWorkspaceDirPath(), WORKSPACE_DB)
 }
 
 let workspaceDb: DatabaseSync | null = null
 let dbInitPromise: Promise<DatabaseSync> | null = null
+let dbPathOverride: string | null = null
+
+const workspaceDbContext = new AsyncLocalStorage<DatabaseSync>()
+
+/** 服务端 AI 请求内注入临时 workspace DB，避免污染桌面全局 singleton */
+export function runWithWorkspaceDb<T>(db: DatabaseSync, fn: () => Promise<T>): Promise<T> {
+  return workspaceDbContext.run(db, fn) as Promise<T>
+}
+
+export function resetWorkspaceDbCache(): void {
+  try {
+    workspaceDb?.close()
+  } catch {
+    /* ignore */
+  }
+  workspaceDb = null
+  dbInitPromise = null
+}
+
+/** 清空单例引用但不关闭已返回的 DB 连接（服务端 per-request 内存库）。 */
+export function detachWorkspaceDbCache(): void {
+  workspaceDb = null
+  dbInitPromise = null
+}
+
+/** 从 JSON 快照创建内存 SQLite（Web API AI 管线） */
+export async function createMemoryWorkspaceDb(
+  payload: WorkspacePayload,
+  options?: { keepOpen?: boolean },
+): Promise<DatabaseSync> {
+  dbPathOverride = ':memory:'
+  resetWorkspaceDbCache()
+  try {
+    const db = await ensureWorkspaceDb()
+    writeWorkspaceSnapshot(db, normalizeWorkspacePayload(payload))
+    if (options?.keepOpen) detachWorkspaceDbCache()
+    else resetWorkspaceDbCache()
+    return db
+  } finally {
+    dbPathOverride = null
+  }
+}
 
 export function getWorkspaceDbIfInitialized(): DatabaseSync | null {
   return workspaceDb
@@ -44,6 +88,9 @@ async function ensureWorkspaceDir(): Promise<void> {
 }
 
 export async function ensureWorkspaceDb(): Promise<DatabaseSync> {
+  const contextual = workspaceDbContext.getStore()
+  if (contextual) return contextual
+
   if (workspaceDb) return workspaceDb
   if (dbInitPromise) return dbInitPromise
 
@@ -293,6 +340,7 @@ export async function ensureWorkspaceDb(): Promise<DatabaseSync> {
       top_p REAL,
       ai_profiles_json TEXT NOT NULL DEFAULT '[]',
       active_ai_profile_id TEXT NOT NULL DEFAULT '',
+      chapter_production_models_json TEXT NOT NULL DEFAULT '{}',
       image_provider TEXT NOT NULL DEFAULT '',
       image_model TEXT NOT NULL DEFAULT '',
       image_api_key TEXT NOT NULL DEFAULT '',
@@ -420,6 +468,10 @@ function ensureAppSettingsColumns(db: DatabaseSync): void {
 
   if (!columnNames.has('image_base_url')) {
     db.exec(`ALTER TABLE app_settings ADD COLUMN image_base_url TEXT NOT NULL DEFAULT '';`)
+  }
+
+  if (!columnNames.has('chapter_production_models_json')) {
+    db.exec(`ALTER TABLE app_settings ADD COLUMN chapter_production_models_json TEXT NOT NULL DEFAULT '{}';`)
   }
 }
 
@@ -675,7 +727,7 @@ export function readWorkspaceSnapshot(db: DatabaseSync): WorkspacePayload | null
   if (projects.length === 0) {
     const settings = db.prepare(`
       SELECT theme, selected_project_id AS selectedProjectId, provider, api_key AS apiKey, base_url AS baseUrl, temperature, top_p AS topP, auto_save_interval AS autoSaveInterval
-      , model, ai_profiles_json AS aiProfilesJson, active_ai_profile_id AS activeAiProfileId, image_provider AS imageProvider, image_model AS imageModel, image_api_key AS imageApiKey, image_base_url AS imageBaseUrl, ui_scale AS uiScale, dark_mode AS darkMode, dark_mode_style AS darkModeStyle
+      , model, ai_profiles_json AS aiProfilesJson, active_ai_profile_id AS activeAiProfileId, chapter_production_models_json AS chapterProductionModelsJson, image_provider AS imageProvider, image_model AS imageModel, image_api_key AS imageApiKey, image_base_url AS imageBaseUrl, ui_scale AS uiScale, dark_mode AS darkMode, dark_mode_style AS darkModeStyle
       FROM app_settings
       WHERE id = 1
     `).get() as
@@ -690,6 +742,7 @@ export function readWorkspaceSnapshot(db: DatabaseSync): WorkspacePayload | null
           topP: number | null
           aiProfilesJson: string
           activeAiProfileId: string
+          chapterProductionModelsJson: string
           imageProvider: string
           imageModel: string
           imageApiKey: string
@@ -774,6 +827,7 @@ export function readWorkspaceSnapshot(db: DatabaseSync): WorkspacePayload | null
               topP: settings.topP === null ? undefined : settings.topP,
               aiProfiles: parseJson(settings.aiProfilesJson, []),
               activeAiProfileId: settings.activeAiProfileId,
+              chapterProductionModels: parseJson(settings.chapterProductionModelsJson, {}),
               imageProvider: settings.imageProvider,
               imageModel: settings.imageModel,
               imageApiKey: settings.imageApiKey,
@@ -1035,7 +1089,7 @@ export function readWorkspaceSnapshot(db: DatabaseSync): WorkspacePayload | null
 
   const settings = db.prepare(`
     SELECT theme, selected_project_id AS selectedProjectId, provider, api_key AS apiKey, base_url AS baseUrl, temperature, top_p AS topP, auto_save_interval AS autoSaveInterval
-    , model, ai_profiles_json AS aiProfilesJson, active_ai_profile_id AS activeAiProfileId, image_provider AS imageProvider, image_model AS imageModel, image_api_key AS imageApiKey, image_base_url AS imageBaseUrl, ui_scale AS uiScale, dark_mode AS darkMode, dark_mode_style AS darkModeStyle
+    , model, ai_profiles_json AS aiProfilesJson, active_ai_profile_id AS activeAiProfileId, chapter_production_models_json AS chapterProductionModelsJson, image_provider AS imageProvider, image_model AS imageModel, image_api_key AS imageApiKey, image_base_url AS imageBaseUrl, ui_scale AS uiScale, dark_mode AS darkMode, dark_mode_style AS darkModeStyle
     FROM app_settings
     WHERE id = 1
   `).get() as
@@ -1050,6 +1104,7 @@ export function readWorkspaceSnapshot(db: DatabaseSync): WorkspacePayload | null
         topP: number | null
         aiProfilesJson: string
         activeAiProfileId: string
+        chapterProductionModelsJson: string
         imageProvider: string
         imageModel: string
         imageApiKey: string
@@ -1168,6 +1223,7 @@ export function readWorkspaceSnapshot(db: DatabaseSync): WorkspacePayload | null
         topP: settings.topP === null ? undefined : settings.topP,
         aiProfiles: parseJson(settings.aiProfilesJson, []),
         activeAiProfileId: settings.activeAiProfileId,
+        chapterProductionModels: parseJson(settings.chapterProductionModelsJson, {}),
         imageProvider: settings.imageProvider,
         imageModel: settings.imageModel,
         imageApiKey: settings.imageApiKey,
@@ -1453,7 +1509,14 @@ export function writeWorkspaceSnapshot(db: DatabaseSync, payload: WorkspacePaylo
 
       workspace.outlineVolumes.forEach((volume, index) => {
         allIds.outline_volumes.add(volume.id)
-        insertOutlineVolume.run(volume.id, project.id, volume.title, volume.wordTarget, volume.summary, index)
+        insertOutlineVolume.run(
+          volume.id,
+          project.id,
+          volume.title,
+          volume.wordTarget ?? '',
+          volume.summary ?? '',
+          index,
+        )
       })
 
       workspace.outlineItems.forEach((item, index) => {
@@ -1461,12 +1524,12 @@ export function writeWorkspaceSnapshot(db: DatabaseSync, payload: WorkspacePaylo
         insertOutline.run(
           item.id,
           project.id,
-          item.volumeId,
-          item.title,
-          item.wordTarget,
-          item.conflict,
-          item.summary,
-          item.status,
+          item.volumeId ?? '',
+          item.title ?? '',
+          item.wordTarget ?? '',
+          item.conflict ?? '',
+          item.summary ?? '',
+          item.status ?? 'pending',
           item.sortOrder ?? index
         )
       })
@@ -1476,13 +1539,13 @@ export function writeWorkspaceSnapshot(db: DatabaseSync, payload: WorkspacePaylo
         insertChapter.run(
           chapter.id,
           project.id,
-          chapter.volumeId,
-          chapter.outlineItemId,
-          chapter.title,
-          chapter.summary,
-          chapter.status,
-          chapter.wordTarget,
-          chapter.content,
+          chapter.volumeId ?? '',
+          chapter.outlineItemId ?? '',
+          chapter.title ?? '',
+          chapter.summary ?? '',
+          chapter.status ?? 'draft',
+          chapter.wordTarget ?? '',
+          chapter.content ?? '',
           index
         )
       })
@@ -1677,8 +1740,8 @@ export function writeWorkspaceSnapshot(db: DatabaseSync, payload: WorkspacePaylo
     }
 
     db.prepare(`
-    INSERT OR REPLACE INTO app_settings (id, theme, selected_project_id, provider, model, api_key, base_url, temperature, top_p, ai_profiles_json, active_ai_profile_id, image_provider, image_model, image_api_key, image_base_url, auto_save_interval, ui_scale, dark_mode, dark_mode_style)
-    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO app_settings (id, theme, selected_project_id, provider, model, api_key, base_url, temperature, top_p, ai_profiles_json, active_ai_profile_id, chapter_production_models_json, image_provider, image_model, image_api_key, image_base_url, auto_save_interval, ui_scale, dark_mode, dark_mode_style)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       payload.theme,
       payload.selectedProjectId,
@@ -1690,6 +1753,7 @@ export function writeWorkspaceSnapshot(db: DatabaseSync, payload: WorkspacePaylo
       normalizedAppSettings.topP ?? null,
       JSON.stringify(normalizedAppSettings.aiProfiles ?? []),
       normalizedAppSettings.activeAiProfileId,
+      JSON.stringify(normalizedAppSettings.chapterProductionModels ?? {}),
       normalizedAppSettings.imageProvider,
       normalizedAppSettings.imageModel,
       normalizedAppSettings.imageApiKey,
@@ -1753,8 +1817,8 @@ export function writeAppSettingsRow(
 ): void {
   const normalized = normalizeAppSettings(settings)
   db.prepare(`
-    INSERT INTO app_settings (id, theme, selected_project_id, provider, model, api_key, base_url, temperature, top_p, ai_profiles_json, active_ai_profile_id, image_provider, image_model, image_api_key, image_base_url, auto_save_interval, ui_scale, dark_mode, dark_mode_style)
-    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO app_settings (id, theme, selected_project_id, provider, model, api_key, base_url, temperature, top_p, ai_profiles_json, active_ai_profile_id, chapter_production_models_json, image_provider, image_model, image_api_key, image_base_url, auto_save_interval, ui_scale, dark_mode, dark_mode_style)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       theme = excluded.theme,
       selected_project_id = excluded.selected_project_id,
@@ -1766,6 +1830,7 @@ export function writeAppSettingsRow(
       top_p = excluded.top_p,
       ai_profiles_json = excluded.ai_profiles_json,
       active_ai_profile_id = excluded.active_ai_profile_id,
+      chapter_production_models_json = excluded.chapter_production_models_json,
       image_provider = excluded.image_provider,
       image_model = excluded.image_model,
       image_api_key = excluded.image_api_key,
@@ -1785,6 +1850,7 @@ export function writeAppSettingsRow(
     normalized.topP ?? null,
     JSON.stringify(normalized.aiProfiles ?? []),
     normalized.activeAiProfileId,
+    JSON.stringify(normalized.chapterProductionModels ?? {}),
     normalized.imageProvider,
     normalized.imageModel,
     normalized.imageApiKey,

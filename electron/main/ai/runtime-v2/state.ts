@@ -17,6 +17,12 @@ export function configureRuntimeState(ensureDb: () => Promise<DatabaseSync>): vo
   ensureDbFn = ensureDb
 }
 
+/** 服务端每请求隔离：清空单例以便绑定新的 workspace DB。 */
+export function resetAssistantRuntimeState(): void {
+  sharedConversation = null
+  ensureDbFn = null
+}
+
 /** 惰性拿到 conversation 单例（首次调用会 ensure db）。 */
 export async function getSharedConversation(): Promise<ConversationManager> {
   if (sharedConversation) return sharedConversation

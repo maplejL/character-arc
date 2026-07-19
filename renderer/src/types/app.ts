@@ -827,6 +827,13 @@ export interface AiProfile {
   topP?: number
 }
 
+/** 章节生产分模型：初稿 / 修复 / 审查各绑定一个 AiProfile */
+export interface ChapterProductionModels {
+  draftProfileId?: string
+  repairProfileId?: string
+  auditProfileId?: string
+}
+
 export interface AppSettings {
   /** AI 供应商标识 */
   provider: string
@@ -844,6 +851,8 @@ export interface AppSettings {
   aiProfiles: AiProfile[]
   /** 当前激活的 AI 接口配置 ID */
   activeAiProfileId: string
+  /** 章节生产流水线分角色模型（未设则回退到当前激活配置） */
+  chapterProductionModels?: ChapterProductionModels
   /** 图片服务预设标识 */
   imageProvider: string
   /** 图片生成模型名称 */

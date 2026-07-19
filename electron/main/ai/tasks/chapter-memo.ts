@@ -8,6 +8,8 @@ import {
   formatOutlineItems, formatRelatedChapters,
   formatVolumeChapterSummaries, formatOpenPlotThreads
 } from '../prompts/format-helpers'
+import { coerceMemoStringArray, unwrapChapterMemoPayload } from './memo-array'
+import { prependFrozenPhase } from '../prompts/frozen-prefix'
 
 const CHAPTER_MEMO_MAX_TOKENS = 26000
 
@@ -31,6 +33,45 @@ const handler: TaskHandler = {
   buildPrompt(input: PromptBuildInput) {
     const { context, capabilityPreamble } = input
     const targetWordCount = String(context.targetWordCount ?? context.chapterWordTarget ?? '').trim()
+    const frozenPrefix = String(context.frozenProductionPrefix ?? '').trim()
+
+    const memoBody = `请为以下章节生成写作备忘。
+
+项目题材：${String(context.projectGenre ?? '')}
+当前分卷：${String(context.chapterVolumeTitle ?? '')}
+当前分卷摘要：${String(context.chapterVolumeSummary ?? '')}
+当前章节标题：${String(context.chapterTitle ?? '')}
+当前章节摘要：${String(context.chapterSummary ?? '')}
+目标字数：${targetWordCount}
+
+当前绑定大纲：
+${formatCurrentOutlineItem(context.currentOutlineItem) || '暂无'}
+
+同一大纲拆章情况：
+${formatOutlineChapterSplit(context.outlineChapterSplit) || '未拆分或暂无前置同纲章节'}
+
+相邻章节参考：
+${formatRelatedChapters(context.relatedChapters) || '暂无'}
+
+本卷章节概览：
+${formatVolumeChapterSummaries(context.volumeChapterSummaries) || '暂无'}
+
+未收伏笔 / 活跃剧情线：
+${formatOpenPlotThreads(context.plotThreads) || '暂无'}
+
+相关世界观：
+${formatWorldviewEntries(context.worldviewEntries) || '暂无'}
+
+相关角色：
+${formatCharacters(context.characters) || '暂无'}
+
+角色关系：
+${formatCharacterRelationships(context.characterRelationships, context.characters) || '暂无'}
+
+相关大纲：
+${formatOutlineItems(context.outlineItems) || '暂无'}${formatWritingJournals(context.recentWritingJournals)}
+
+返回格式：{"memo":{"currentTask":"","readerExpectation":"","payoffs":[],"holds":[],"transitionFunctions":"","decisionChecks":[],"endingChanges":[],"doNotDo":[],"emotionArc":"","partScopedTask":"","mustDifferentiateFrom":[],"requiredStake":""}}`
 
     return {
       system: `${capabilityPreamble.system}\n\n你是小说写作的章节备忘规划师。任务：严格基于"当前章节摘要"，输出本章的"写作备忘"——这是后续 Writer 写正文的硬指令，不是泛泛的写作建议。
@@ -51,16 +92,20 @@ const handler: TaskHandler = {
 - transitionFunctions：非冲突段落各自承担什么功能（1-3 句）
 - decisionChecks：本章关键人物选择必须过的检查问题（数组，2-3 条）
 - endingChanges：章尾必须发生的具体改变（数组，1-3 条，类型必须是 信息变化/关系变化/物理变化/权力变化 之一）
-- doNotDo：本章红线（数组，1-3 条具体禁忌，不要写"避免 AI 味"这种泛泛的）
-- emotionArc：本章情绪轨迹（1 句话，格式"起点情绪→转折→终点情绪"，如"安逸→被突袭打碎→自我怀疑"）`,
-      user: `${capabilityPreamble.user}\n\n请为以下章节生成写作备忘。\n\n项目题材：${String(context.projectGenre ?? '')}\n当前分卷：${String(context.chapterVolumeTitle ?? '')}\n当前分卷摘要：${String(context.chapterVolumeSummary ?? '')}\n当前章节标题：${String(context.chapterTitle ?? '')}\n当前章节摘要：${String(context.chapterSummary ?? '')}\n目标字数：${targetWordCount}\n\n当前绑定大纲：\n${formatCurrentOutlineItem(context.currentOutlineItem) || '暂无'}\n\n同一大纲拆章情况：\n${formatOutlineChapterSplit(context.outlineChapterSplit) || '未拆分或暂无前置同纲章节'}\n\n相邻章节参考：\n${formatRelatedChapters(context.relatedChapters) || '暂无'}\n\n本卷章节概览：\n${formatVolumeChapterSummaries(context.volumeChapterSummaries) || '暂无'}\n\n未收伏笔 / 活跃剧情线：\n${formatOpenPlotThreads(context.plotThreads) || '暂无'}\n\n相关世界观：\n${formatWorldviewEntries(context.worldviewEntries) || '暂无'}\n\n相关角色：\n${formatCharacters(context.characters) || '暂无'}\n\n角色关系：\n${formatCharacterRelationships(context.characterRelationships, context.characters) || '暂无'}\n\n相关大纲：\n${formatOutlineItems(context.outlineItems) || '暂无'}${formatWritingJournals(context.recentWritingJournals)}\n\n返回格式：{"memo":{"currentTask":"","readerExpectation":"","payoffs":[],"holds":[],"transitionFunctions":"","decisionChecks":[],"endingChanges":[],"doNotDo":[],"emotionArc":""}}`
+- doNotDo：本章红线（数组，2-5 条具体禁忌，**必填且不得为空**，不要写"避免 AI 味"这种泛泛的）。必须包含：①禁止写穿后续大纲节点的具体情节；②主要角色禁止的 OOC 行为；③关系/立场上禁止的越级变化；若偏技术/旁白可再加对白占比与句长约束。空 doNotDo 等于把全局约束从写作契约里删掉，下游审查与修复会失去具体红线。
+- emotionArc：本章情绪轨迹（1 句话，格式"起点情绪→转折→终点情绪"，如"安逸→被突袭打碎→自我怀疑"）
+- partScopedTask：若同一大纲拆成多章，本章（当前部分）独占要完成的一件事（动词开头，1 句）；非拆章可留空
+- mustDifferentiateFrom：相对前置同纲章或上一章，本章必须在场景/冲突点上不同的 1-2 条（数组）；无可区分压力时可留空
+- requiredStake：本章至少一次「选择带来代价」的具体描述（1 句）；若无决策戏可留空`,
+      user: frozenPrefix
+        ? prependFrozenPhase(frozenPrefix, 'chapter-memo', '请输出本章写作备忘 JSON。')
+        : `${capabilityPreamble.user}\n\n${memoBody}`,
     }
   },
   normalize(raw: string): AiTaskResult {
-    const parsed = extractJsonObject(raw) as { memo?: Partial<ChapterMemoResult['memo']> }
-    const memoRaw = parsed.memo ?? {}
-    const stringArray = (v: unknown): string[] =>
-      Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []
+    const parsed = extractJsonObject(raw)
+    const memoRaw = unwrapChapterMemoPayload(parsed)
+    const stringArray = coerceMemoStringArray
     return {
       memo: {
         currentTask: String(memoRaw.currentTask ?? '').trim(),
@@ -71,17 +116,36 @@ const handler: TaskHandler = {
         decisionChecks: stringArray(memoRaw.decisionChecks),
         endingChanges: stringArray(memoRaw.endingChanges),
         doNotDo: stringArray(memoRaw.doNotDo),
-        emotionArc: String((memoRaw as Record<string, unknown>).emotionArc ?? '').trim()
+        emotionArc: String((memoRaw as Record<string, unknown>).emotionArc ?? '').trim(),
+        partScopedTask: String((memoRaw as Record<string, unknown>).partScopedTask ?? '').trim(),
+        mustDifferentiateFrom: stringArray((memoRaw as Record<string, unknown>).mustDifferentiateFrom),
+        requiredStake: String((memoRaw as Record<string, unknown>).requiredStake ?? '').trim(),
       }
     } as ChapterMemoResult
   },
   validate(result: AiTaskResult): boolean {
     const memo = (result as ChapterMemoResult).memo
-    return Boolean(
-      memo
-      && memo.currentTask
-      && memo.endingChanges.length > 0
-    )
+    if (!memo) return false
+    if (!memo.currentTask || memo.endingChanges.length === 0) return false
+    // doNotDo 是"禁止写穿后续大纲 / 禁止 OOC / 禁止关系越级"的唯一章节级载体，
+    // 空数组等于把全局约束从写作契约里删掉，下游审查与修复会失去具体红线。
+    if (memo.doNotDo.length === 0) return false
+    return true
+  },
+  describeValidationErrors(result: AiTaskResult): string[] {
+    const memo = (result as ChapterMemoResult).memo
+    const errors: string[] = []
+    if (!memo) return ['memo 字段缺失']
+    if (!memo.currentTask) errors.push('memo.currentTask 为空')
+    if (memo.endingChanges.length === 0) errors.push('memo.endingChanges 为空数组')
+    if (memo.doNotDo.length === 0) {
+      errors.push(
+        'memo.doNotDo 为空数组——本章必须包含至少一条禁止项'
+        + '（如：禁止写穿后续大纲节点、禁止主角 OOC 行为、禁止关系/立场越级），'
+        + '它是下游审查与修复的唯一具体红线依据',
+      )
+    }
+    return errors.length > 0 ? errors : ['memo 结构不完整']
   },
   resolveMaxTokens(): number {
     return CHAPTER_MEMO_MAX_TOKENS

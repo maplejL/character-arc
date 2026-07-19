@@ -2,7 +2,10 @@
 import { computed, ref, watch } from 'vue'
 import { Archive, Download, FileJson, FileStack, FileText, FolderOutput, Lightbulb, Moon, Network, PenTool, Save, Upload, Users } from 'lucide-vue-next'
 import { NButton, NCard, NFormItem, NInput, NModal, NSelect, NSwitch, useMessage } from 'naive-ui'
-import { getPlainTextFromEditorContent } from '@/features/chapters/editorContent'
+import {
+  buildChaptersExportFileStem,
+  buildChaptersExportPayloadFromStore
+} from '@/features/chapters/exportChaptersText'
 import { autoSaveOptions } from '@/features/settings/autoSave'
 import { buildProjectWritingStyleContext, writingStylePresets } from '@/features/writingStyles/presets'
 import ProjectArchiveImportModal from '@/components/ProjectArchiveImportModal.vue'
@@ -158,21 +161,14 @@ async function handleExportJson(): Promise<void> {
 
 // 导出章节正文为 TXT 文件（仅包含纯文本内容）
 async function handleExportText(): Promise<void> {
-  const payload = {
-    project: appStore.currentProject,
-    outlineVolumes: appStore.outlineVolumes,
-    chapters: appStore.chapters.map((chapter) => ({
-      volumeId: chapter.volumeId,
-      title: chapter.title,
-      content: getPlainTextFromEditorContent(chapter.content)
-    })),
-    exportedAt: new Date().toISOString()
-  }
-
   const result = await window.characterArc.exportText(toIpcPayload({
-    data: payload,
+    data: buildChaptersExportPayloadFromStore({
+      project: appStore.currentProject,
+      outlineVolumes: appStore.outlineVolumes,
+      chapters: appStore.chapters
+    }),
     title: '导出章节正文 TXT',
-    defaultPath: `${buildExportStem('chapters')}.txt`
+    defaultPath: `${buildChaptersExportFileStem(appStore.currentProject?.title)}.txt`
   }))
   if (result.success) {
     message.success('章节内容已导出')

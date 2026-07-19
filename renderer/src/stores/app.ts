@@ -3,7 +3,9 @@ import { defineStore } from 'pinia'
 import { FAST_PERSIST_DELAY_MS, formatAutoSaveIntervalLabel, isLiveAutoSaveInterval, resolveAutoSaveDelayMs } from '@/features/settings/autoSave'
 import { createDefaultWorkflowDocuments } from '@/features/novelWorkflow/documents'
 import { createDefaultNovelWorkflowStages } from '@/features/novelWorkflow/stages'
-import { DEFAULT_CHAPTER_WORD_TARGET, normalizeChapterWordTarget } from '@/features/chapters/wordTarget'
+import { DEFAULT_CHAPTER_WORD_TARGET, isOutlineChapterCountTarget, normalizeChapterWordTarget } from '@/features/chapters/wordTarget'
+import { formatChapterDisplayTitle } from '@/features/chapters/chapterTitle'
+import { relinkOrphanedWritingJournals } from '@shared/auto-creation/acceptance'
 import { formatProjectWordCount } from '@/features/projects/wordCount'
 import { createProjectEditedAt } from '@/features/projects/lastEdited'
 import {
@@ -861,7 +863,14 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /** 进入章节写作页面 */
-  function openChapterStudio(chapterId?: string): void {
+  function openChapterStudio(
+    chapterId?: string,
+    sourcePanel?: Exclude<PanelName, 'chapters'>
+  ): void {
+    if (sourcePanel) {
+      lastWorkbenchPanel.value = sourcePanel
+    }
+
     if (chapterId) {
       selectedChapterId.value = chapterId
     } else if (!selectedChapterId.value) {
@@ -879,6 +888,12 @@ export const useAppStore = defineStore('app', () => {
     if (activePanel.value === 'chapters') {
       activePanel.value = lastWorkbenchPanel.value
     }
+  }
+
+  /** 从章节写作返回剧情大纲面板 */
+  function backToOutline(): void {
+    lastWorkbenchPanel.value = 'outline'
+    backToWorkbench()
   }
 
   /** 打开指定项目：确保工作区存在、切换选中项目、进入工作台 */
@@ -1132,6 +1147,19 @@ export const useAppStore = defineStore('app', () => {
 
     knowledgeDocuments.value = [...preservedDocuments, ...normalizedDocuments]
     schedulePersist('fast')
+  }
+
+  function relinkOrphanedChapterJournals(): number {
+    const relinked = relinkOrphanedWritingJournals(
+      knowledgeDocuments.value,
+      chapters.value,
+      outlineItems.value,
+    )
+    if (relinked.changed > 0) {
+      knowledgeDocuments.value = relinked.documents as KnowledgeDocument[]
+      schedulePersist('fast')
+    }
+    return relinked.changed
   }
 
   function removeKnowledgeDocuments(documentIds: string[]): void {
@@ -1901,18 +1929,33 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /** 从大纲节点创建章节，继承标题、摘要和字数目标 */
-  function createChapterFromOutlineItem(item: Pick<OutlineItem, 'id' | 'volumeId' | 'title' | 'summary' | 'wordTarget'>): void {
+  function createChapterFromOutlineItem(
+    item: Pick<OutlineItem, 'id' | 'volumeId' | 'title' | 'summary' | 'wordTarget'>,
+    options?: { navigate?: boolean; partIndex?: number; totalParts?: number }
+  ): string {
     let nextChapterId = ''
     updateCurrentWorkspace((workspace) => {
       const targetVolumeId = item.volumeId || getWorkspacePrimaryVolumeId(workspace)
+      const totalParts = Math.max(1, options?.totalParts ?? 1)
+      const partIndex = Math.max(0, options?.partIndex ?? 0)
+      const baseTitle = item.title?.trim() || '新章节'
+      const volumeSequence = getChapterSequenceInVolume(workspace.chapters, targetVolumeId)
+      const title = formatChapterDisplayTitle({
+        outlineTitle: baseTitle,
+        volumeSequence,
+        partIndex,
+        totalParts
+      })
       const nextChapter: ChapterDraft = {
         id: uniqueId('chapter'),
         outlineItemId: item.id,
         volumeId: targetVolumeId,
-        title: item.title?.trim() || '新章节',
+        title,
         summary: item.summary?.trim() || '待补充章节摘要',
         status: 'draft',
-        wordTarget: normalizeChapterWordTarget(item.wordTarget),
+        wordTarget: isOutlineChapterCountTarget(item.wordTarget)
+          ? DEFAULT_CHAPTER_WORD_TARGET
+          : normalizeChapterWordTarget(item.wordTarget),
         content: ''
       }
       nextChapterId = nextChapter.id
@@ -1926,9 +1969,15 @@ export const useAppStore = defineStore('app', () => {
     selectedChapterId.value = nextChapterId || selectedChapterId.value
     pendingChapterInsertion.value = null
     currentChapterSelection.value = null
-    activePanel.value = 'chapters'
-    currentView.value = 'chapter-studio'
+    if (options?.navigate !== false) {
+      if (activePanel.value === 'outline') {
+        lastWorkbenchPanel.value = 'outline'
+      }
+      activePanel.value = 'chapters'
+      currentView.value = 'chapter-studio'
+    }
     schedulePersist('fast')
+    return nextChapterId
   }
 
   /** 拖拽移动章节位置 */
@@ -2089,27 +2138,62 @@ export const useAppStore = defineStore('app', () => {
 
   /** 删除章节（至少保留一章），自动切换到相邻章节 */
   function deleteChapter(chapterId: string): void {
-    if (chapters.value.length <= 1) {
-      return
+    deleteChapters([chapterId])
+  }
+
+  /** 批量删除章节（至少保留一章），返回实际删除数量 */
+  function deleteChapters(chapterIds: string[]): number {
+    const idSet = new Set(chapterIds.filter(Boolean))
+    if (idSet.size === 0) {
+      return 0
     }
 
-    const targetIndex = chapters.value.findIndex((chapter) => chapter.id === chapterId)
-    if (targetIndex === -1) {
-      return
+    const list = chapters.value
+    if (list.length <= 1) {
+      return 0
     }
+
+    let toRemove = list.filter((chapter) => idSet.has(chapter.id)).map((chapter) => chapter.id)
+    if (toRemove.length === 0) {
+      return 0
+    }
+
+    if (list.length - toRemove.length < 1) {
+      const keepId =
+        list.find((chapter) => !idSet.has(chapter.id))?.id
+        ?? (selectedChapterId.value && !idSet.has(selectedChapterId.value)
+          ? selectedChapterId.value
+          : list[0]?.id)
+      toRemove = toRemove.filter((id) => id !== keepId)
+      if (toRemove.length === 0) {
+        return 0
+      }
+    }
+
+    const removeSet = new Set(toRemove)
+    const selectedWasRemoved = removeSet.has(selectedChapterId.value)
+    const selectedIndex = list.findIndex((chapter) => chapter.id === selectedChapterId.value)
+    const remaining = list.filter((chapter) => !removeSet.has(chapter.id))
 
     updateCurrentWorkspace((workspace) => ({
       ...workspace,
-      chapters: workspace.chapters.filter((chapter) => chapter.id !== chapterId),
-      chapterVersions: workspace.chapterVersions.filter((version) => version.chapterId !== chapterId)
+      chapters: workspace.chapters.filter((chapter) => !removeSet.has(chapter.id)),
+      chapterVersions: workspace.chapterVersions.filter((version) => !removeSet.has(version.chapterId))
     }))
 
-    if (selectedChapterId.value === chapterId) {
-      const fallback = chapters.value[Math.max(0, targetIndex - 1)] ?? chapters.value[0]
+    for (const id of toRemove) {
+      dismissChapterStateWarnings(id)
+      dismissChapterPostGenerationIssues(id)
+    }
+
+    if (selectedWasRemoved) {
+      const fallback = remaining[Math.max(0, selectedIndex - 1)] ?? remaining[0]
       selectedChapterId.value = fallback?.id ?? ''
       pendingChapterInsertion.value = null
     }
+
     schedulePersist('fast')
+    return toRemove.length
   }
 
   function updateChapterTitle(value: string): void {
@@ -2958,6 +3042,7 @@ export const useAppStore = defineStore('app', () => {
     coverWorkbenchHistory,
     backToProjects,
     backToWorkbench,
+    backToOutline,
     chapterVersions,
     chapters,
     characterRelationships,
@@ -2990,6 +3075,7 @@ export const useAppStore = defineStore('app', () => {
     isLiveAutoSave,
     isPersistencePending,
     deleteChapter,
+    deleteChapters,
     deleteCharacter,
     deleteCharacterRelationship,
     deleteInspirationEntry,
@@ -3059,6 +3145,7 @@ export const useAppStore = defineStore('app', () => {
     activeWorkflowVolume,
     setActiveWorkflowVolumeId,
     mergeKnowledgeDocuments,
+    relinkOrphanedChapterJournals,
     removeKnowledgeDocuments,
     projectConstraints,
     upsertProjectConstraint,

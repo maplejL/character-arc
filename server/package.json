@@ -1,0 +1,46 @@
+{
+  "name": "@characterarc/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start:once": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "migrate": "tsx src/db/migrate.ts",
+    "test:p0": "tsx scripts/p0-api-e2e.ts",
+    "test:workspace": "tsx scripts/workspace-api-e2e.ts",
+    "test:ai": "tsx scripts/ai-pipeline-e2e.ts",
+    "test:ai-stream": "tsx scripts/ai-stream-e2e.ts",
+    "test:auto-creation-worker": "tsx scripts/auto-creation-worker-e2e.ts",
+    "test:file-upload": "tsx scripts/file-upload-e2e.ts",
+    "test:remaining-modules": "tsx scripts/remaining-modules-e2e.ts",
+    "test:ai-config-models": "tsx scripts/ai-config-models-e2e.ts",
+    "test:parity": "tsx scripts/parity-e2e.ts",
+    "import:carc": "tsx scripts/import-carc.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.78",
+    "@ai-sdk/openai": "^3.0.64",
+    "@electric-sql/pglite": "^0.3.14",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/jwt": "^9.0.4",
+    "@fastify/multipart": "^9.0.3",
+    "@fastify/websocket": "^11.2.0",
+    "ai": "^6.0.184",
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.4.0",
+    "jszip": "^3.10.1",
+    "pg": "^8.16.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^24.3.0",
+    "@types/pg": "^8.15.4",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.2"
+  }
+}

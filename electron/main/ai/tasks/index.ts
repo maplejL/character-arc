@@ -18,7 +18,9 @@ import chapterFirstDraft from './chapter-first-draft'
 import chapterSummarize from './chapter-summarize'
 import chapterScenePlan from './chapter-scene-plan'
 import chapterMemo from './chapter-memo'
+import chapterBrief from './chapter-brief'
 import chapterAudit from './chapter-audit'
+import chapterQualityReview from './chapter-quality-review'
 import plotThreadDetect from './plot-thread-detect'
 import workflowDocuments from './workflow-documents'
 import referenceStyleChunk from './reference-style-chunk'
@@ -27,6 +29,7 @@ import referenceDeepAnalyze from './reference-deep-analyze'
 import styleFingerprintExtract from './style-fingerprint-extract'
 import storyDeepAudit from './story-deep-audit'
 import chapterRepair from './chapter-repair'
+import chapterFinalPolish from './chapter-final-polish'
 import chapterSessionNote from './chapter-session-note'
 import spiralSeed from './spiral-seed'
 import spiralExpand from './spiral-expand'
@@ -35,6 +38,8 @@ import characterEnhance from './character-enhance'
 import worldviewEnhance from './worldview-enhance'
 import outlineEnhance from './outline-enhance'
 import relationEnhance from './relation-enhance'
+import chapterTitleBatch from './chapter-title-batch'
+import continuationReverseExtract from './continuation-reverse-extract'
 
 /** 任务处理器注册表，按任务名称映射 */
 const TASK_REGISTRY = new Map<AiTaskName, TaskHandler>()
@@ -64,7 +69,9 @@ register(chapterFirstDraft)
 register(chapterSummarize)
 register(chapterScenePlan)
 register(chapterMemo)
+register(chapterBrief)
 register(chapterAudit)
+register(chapterQualityReview)
 register(plotThreadDetect)
 register(workflowDocuments)
 register(referenceStyleChunk)
@@ -73,6 +80,7 @@ register(referenceDeepAnalyze)
 register(styleFingerprintExtract)
 register(storyDeepAudit)
 register(chapterRepair)
+register(chapterFinalPolish)
 register(chapterSessionNote)
 register(spiralSeed)
 register(spiralExpand)
@@ -81,6 +89,8 @@ register(characterEnhance)
 register(worldviewEnhance)
 register(outlineEnhance)
 register(relationEnhance)
+register(chapterTitleBatch)
+register(continuationReverseExtract)
 
 /**
  * 根据任务名称获取对应的任务处理器

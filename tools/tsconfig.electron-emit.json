@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "rootDir": "../electron/main",
+    "outDir": "../electron/main",
+    "declaration": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": [
+    "../electron/main/ai/tasks/**/*.ts",
+    "../electron/main/ai/shared-types.ts",
+    "../electron/main/ai/spiral/types.ts",
+    "../electron/main/ai/skills/types.ts",
+    "../electron/main/ai/prompts/**/*.ts"
+  ],
+  "exclude": []
+}
