@@ -466,6 +466,7 @@ export function useAutoCreationRunner(): {
 
         if (!result.ok) {
           if (result.error === 'canceled') break
+          appStore.updateChapter(chapterId, { status: 'quarantine' })
           pushLog({
             level: 'error',
             title: '本章处理失败',
@@ -482,7 +483,9 @@ export function useAutoCreationRunner(): {
           return
         }
 
-        appStore.updateChapter(chapterId, { status: 'review' })
+        appStore.updateChapter(chapterId, {
+          status: result.auditPass === false || result.finalGatePass === false ? 'quarantine' : 'review'
+        })
         const outlineItem = chapter.outlineItemId
           ? appStore.outlineItems.find((item) => item.id === chapter.outlineItemId)
           : undefined
@@ -513,6 +516,7 @@ export function useAutoCreationRunner(): {
           currentIndex: index + 1
         })
       } catch (error) {
+        appStore.updateChapter(chapterId, { status: 'quarantine' })
         pushLog({
           level: 'error',
           title: '本章处理异常',

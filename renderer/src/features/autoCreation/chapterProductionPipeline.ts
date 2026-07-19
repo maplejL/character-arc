@@ -90,7 +90,9 @@ function buildMemoBaseContext(input: {
 }): Record<string, unknown> {
   const { workspace, chapter, chapterVolume, targetWordCount, previousChapterAdvice } = input
   const currentChapterIndex = workspace.chapters.findIndex((item) => item.id === chapter.id)
-  const precedingChapters = workspace.chapters.slice(0, currentChapterIndex)
+  const precedingChapters = workspace.chapters
+    .slice(0, currentChapterIndex)
+    .filter((item) => item.status !== 'quarantine')
   const relatedChapters = precedingChapters.slice(-4).map((item) => ({
     title: item.title,
     summary: item.summary,
@@ -100,7 +102,7 @@ function buildMemoBaseContext(input: {
   const volumeChapterSummaries = precedingChapters
     .filter((item) => item.volumeId === chapter.volumeId && !relatedTitles.has(item.title))
     .map((item) => ({ title: item.title, summary: item.summary }))
-  const firstChapter = workspace.chapters[0]
+  const firstChapter = workspace.chapters.find((item) => item.status !== 'quarantine' || item.id === chapter.id)
   const novelOpenerSummary =
     firstChapter && firstChapter.id !== chapter.id && !relatedTitles.has(firstChapter.title)
       ? { title: firstChapter.title, summary: firstChapter.summary }
@@ -142,8 +144,9 @@ function buildMemoBaseContext(input: {
     : volumeOutlineItems.slice(0, 6)
   const sameOutlineChapters = currentOutlineItem
     ? workspace.chapters.filter((item) =>
-        item.outlineItemId === currentOutlineItem.id
-        || (!item.outlineItemId && item.volumeId === currentOutlineItem.volumeId && item.title.trim() === currentOutlineItem.title.trim())
+        (item.status !== 'quarantine' || item.id === chapter.id)
+        && (item.outlineItemId === currentOutlineItem.id
+          || (!item.outlineItemId && item.volumeId === currentOutlineItem.volumeId && item.title.trim() === currentOutlineItem.title.trim()))
       )
     : []
   const currentOutlineChapterIndex = sameOutlineChapters.findIndex((item) => item.id === chapter.id)

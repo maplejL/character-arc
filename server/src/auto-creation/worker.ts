@@ -437,6 +437,22 @@ async function executeRun(run: AutoCreationRunRead): Promise<void> {
 
         if (result.error === 'canceled' || controller.signal.aborted) return
 
+        // 失败章隔离：标记后不再进入后续章的相关上下文（relatedChapters / volumeChapterSummaries 等）
+        try {
+          const latestWorkspace = await readUserWorkspace(run.userId)
+          const latestWs = getProjectWorkspace(latestWorkspace, run.projectId)
+          const latestChapters = (Array.isArray(latestWs.chapters) ? latestWs.chapters : []) as ChapterDraft[]
+          const failedChapter = latestChapters.find((item) => item.id === chapterId)
+          if (failedChapter && failedChapter.status !== 'quarantine') {
+            failedChapter.status = 'quarantine'
+            latestWs.chapters = latestChapters
+            latestWorkspace.workspaces[run.projectId] = latestWs
+            await writeUserWorkspace(run.userId, latestWorkspace)
+          }
+        } catch {
+          // 隔离标记失败不阻断暂停流程
+        }
+
         await updateAutoCreationRun(run.id, {
 
           status: 'paused',
@@ -508,7 +524,8 @@ async function executeRun(run: AutoCreationRunRead): Promise<void> {
         })
       }
 
-      chapter.status = 'review'
+      // 未过审查/终检的章进隔离区：正文保留供追溯与重写，但不再作为后续章的参考上下文
+      chapter.status = (result.auditPass === false || result.finalGatePass === false) ? 'quarantine' : 'review'
 
       ws.chapters = chapters
 

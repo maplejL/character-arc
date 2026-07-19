@@ -27,7 +27,8 @@ const STATUS_LABELS: Record<ChapterDraft['status'], string> = {
   draft: '草稿中',
   review: '待检查',
   polish: '待润色',
-  final: '已定稿'
+  final: '已定稿',
+  quarantine: '需重写'
 }
 
 function formatTime(createdAt: string): string {
@@ -46,6 +47,7 @@ function statusChipClass(status: ChapterDraft['status']): string {
     case 'final': return 'success'
     case 'polish': return 'accent'
     case 'review': return 'warning'
+    case 'quarantine': return 'warning'
     default: return 'neutral'
   }
 }

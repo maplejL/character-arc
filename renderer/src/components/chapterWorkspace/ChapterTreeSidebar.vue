@@ -260,15 +260,17 @@ function formatStatus(status: ChapterDraft['status']): string {
     case 'final': return '已定稿'
     case 'polish': return '待润色'
     case 'review': return '待检查'
+    case 'quarantine': return '需重写'
     default: return '草稿'
   }
 }
 
-function statusType(status: ChapterDraft['status']): 'default' | 'info' | 'success' | 'warning' {
+function statusType(status: ChapterDraft['status']): 'default' | 'info' | 'success' | 'warning' | 'error' {
   switch (status) {
     case 'final': return 'success'
     case 'polish': return 'info'
     case 'review': return 'warning'
+    case 'quarantine': return 'error'
     default: return 'default'
   }
 }

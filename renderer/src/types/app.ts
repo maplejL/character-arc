@@ -715,8 +715,8 @@ export interface ChapterDraft {
   title: string
   /** 章节摘要 */
   summary: string
-  /** 章节状态：草稿 / 审阅 / 润色 / 定稿 */
-  status: 'draft' | 'review' | 'polish' | 'final'
+  /** 章节状态：草稿 / 审阅 / 润色 / 定稿 / 隔离（失败章，不进后续章上下文） */
+  status: 'draft' | 'review' | 'polish' | 'final' | 'quarantine'
   /** 预估字数描述 */
   wordTarget: string
   /** 章节正文 HTML 内容 */

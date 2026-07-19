@@ -494,6 +494,8 @@ function resolveLinkedChapterMeta(item: OutlineItem): { label: string; tone: str
       return { label: '章节待润色', tone: 'warning' }
     case 'review':
       return { label: '章节审阅中', tone: 'neutral' }
+    case 'quarantine':
+      return { label: '章节需重写', tone: 'warning' }
     case 'draft':
     default:
       return { label: '章节写作中', tone: 'primary' }

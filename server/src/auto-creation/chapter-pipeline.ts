@@ -347,7 +347,9 @@ function buildMemoBaseContext(input: {
   const knowledgeDocuments = (input.workspace.knowledgeDocuments ?? []) as KnowledgeDocument[]
 
   const currentChapterIndex = chapters.findIndex((item) => item.id === input.chapter.id)
-  const precedingChapters = chapters.slice(0, currentChapterIndex)
+  const precedingChapters = chapters
+    .slice(0, currentChapterIndex)
+    .filter((item) => item.status !== 'quarantine')
   const relatedChapters = precedingChapters.slice(-4).map((item) => ({
     title: item.title,
     summary: item.summary,
@@ -357,7 +359,7 @@ function buildMemoBaseContext(input: {
   const volumeChapterSummaries = precedingChapters
     .filter((item) => item.volumeId === input.chapter.volumeId && !relatedTitles.has(item.title ?? ''))
     .map((item) => ({ title: item.title, summary: item.summary }))
-  const firstChapter = chapters[0]
+  const firstChapter = chapters.find((item) => item.status !== 'quarantine' || item.id === input.chapter.id)
   const novelOpenerSummary =
     firstChapter && firstChapter.id !== input.chapter.id && !relatedTitles.has(firstChapter.title ?? '')
       ? { title: firstChapter.title, summary: firstChapter.summary }

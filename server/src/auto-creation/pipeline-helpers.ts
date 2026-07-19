@@ -182,10 +182,12 @@ export function loadPreviousChapterAdvice(
 }
 
 export function evaluateChapterAcceptanceSync(
-  chapter: { id: string; content?: string },
+  chapter: { id: string; content?: string; status?: string },
   knowledgeDocuments: KnowledgeDocument[],
 ): { satisfied: boolean; hasBody: boolean } {
   const hasBody = getPlainTextFromEditorContent(chapter.content ?? '').trim().length >= 50
+  // 隔离章（失败/未过终检）必须重新处理，不得按已完成跳过
+  if (chapter.status === 'quarantine') return { satisfied: false, hasBody }
   if (!hasBody) return { satisfied: false, hasBody: false }
   return { satisfied: isChapterAcceptanceRecorded(knowledgeDocuments, chapter.id), hasBody: true }
 }

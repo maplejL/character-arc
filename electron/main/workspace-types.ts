@@ -266,7 +266,7 @@ export type WorkspacePayload = {
         volumeId: string
         title: string
         summary: string
-        status: 'draft' | 'review' | 'polish' | 'final'
+        status: 'draft' | 'review' | 'polish' | 'final' | 'quarantine'
         wordTarget: string
         content: string
       }>
@@ -275,7 +275,7 @@ export type WorkspacePayload = {
         chapterId: string
         title: string
         summary: string
-        status: 'draft' | 'review' | 'polish' | 'final'
+        status: 'draft' | 'review' | 'polish' | 'final' | 'quarantine'
         wordTarget: string
         content: string
         createdAt: string
@@ -431,7 +431,7 @@ export type LegacyWorkspacePayload = Omit<WorkspacePayload, 'workspaces'> & {
     volumeId?: string
     title: string
     summary: string
-    status: 'draft' | 'review' | 'polish' | 'final'
+    status: 'draft' | 'review' | 'polish' | 'final' | 'quarantine'
     wordTarget: string
     content: string
   }>
@@ -440,7 +440,7 @@ export type LegacyWorkspacePayload = Omit<WorkspacePayload, 'workspaces'> & {
     chapterId: string
     title: string
     summary: string
-    status: 'draft' | 'review' | 'polish' | 'final'
+    status: 'draft' | 'review' | 'polish' | 'final' | 'quarantine'
     wordTarget: string
     content: string
     createdAt: string

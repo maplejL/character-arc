@@ -9,6 +9,7 @@ export type BuildChapterProductionContextInput = {
     content?: string
     volumeId?: string
     outlineItemId?: string
+    status?: string
   }>
   outlineItems: Array<{
     id: string
@@ -44,11 +45,14 @@ export function buildOutlineChapterSplit(input: {
 
   const sameOutlineChapters = input.chapters.filter(
     (item) =>
-      item.outlineItemId === currentOutlineItem.id
-      || (
-        !item.outlineItemId
-        && item.volumeId === currentOutlineItem.volumeId
-        && item.title?.trim() === currentOutlineItem.title.trim()
+      (item.status !== 'quarantine' || item.id === input.chapterId)
+      && (
+        item.outlineItemId === currentOutlineItem.id
+        || (
+          !item.outlineItemId
+          && item.volumeId === currentOutlineItem.volumeId
+          && item.title?.trim() === currentOutlineItem.title.trim()
+        )
       ),
   )
   if (sameOutlineChapters.length <= 1) return null
@@ -76,10 +80,11 @@ export function buildChapterProductionContext(
 
   const currentIndex = input.chapters.findIndex((item) => item.id === input.chapterId)
   const chapter = input.chapters[currentIndex]
-  const precedingChapters = currentIndex >= 0 ? input.chapters.slice(0, currentIndex) : []
+  const precedingChapters = (currentIndex >= 0 ? input.chapters.slice(0, currentIndex) : [])
+    .filter((item) => item.status !== 'quarantine')
   const chaptersWithContent = precedingChapters.filter((item) => stripToPlainText(item.content ?? '').length > 0)
   const handoffChapter = chaptersWithContent.at(-1)
-  const firstChapterInBook = input.chapters[0]
+  const firstChapterInBook = input.chapters.find((item) => item.status !== 'quarantine' || item.id === input.chapterId)
   const firstChapterInVolume = input.chapters.find((item) => item.volumeId === input.volumeId)
 
   const volumeOutlineItems = input.outlineItems.filter((item) => item.volumeId === input.volumeId)
