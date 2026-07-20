@@ -88,19 +88,28 @@
 ## 7. 容易踩的坑
 
 - **`normalize` 接口已变**：新增任务时记得 `normalize(raw, input?)` 第二个参数，否则会拿不到上下文。
+- **新增任务必须同步三处注册**（2026-07-19 验收 run 实证）：`AiTaskName`/`AiTaskResult` 联合、`object-schemas.ts` 结构化 schema（JSON 任务缺失会抛错）、`orchestrator.ts streamAiTask` 白名单（worker 的 serverStreamTask 走这条路，缺了会被 try/catch 静默吞掉）。跨章一致性检查曾因此上线后从未生效。
+- **zod 默认丢弃未知字段**：`createRunSchema` 不加字段名就透传不了（`consistencyCheckInterval` 曾因此被静默归零）。
+- **worker 写章节状态要落在刷新后的数组**：版本快照 `commitChapterEditJson` 成功后 `chapters` 会整体换新，给旧对象赋 `status` 会静默丢失（`statusTarget = chapters.find(...) ?? chapter`）。
+- **生产验证任务可绕开 run**：`POST /api/character-arc/v1/ai/generate`（admin 登录）可直接单测任意任务 handler，比跑整轮 run 快得多。
 - **`chapter_versions` 表已存在**：`electron/main/workspace-store.ts` 有 schema，server 侧用 `chapter-json.ts` 的 `commitChapterEditJson` 写入，别自己再造一套版本逻辑。
 - **PowerShell 里 `&&` 不能用**：用 `;` 分隔命令。
 - **vue-tsc 有盲区**（2026-07-19 事故）：根目录 `vue-tsc --noEmit` 不覆盖 `server/` 的所有模块解析路径，server 改动部署前必须额外 `cd server && npx tsc --noEmit`。
 - **nginx 站点文件已变**：生产 nginx 从 `language-learning` 重构为 `main.conf`，旧补丁脚本会重复插 gzip 指令导致配置损坏；`deploy.ps1` 已改为自动探测站点文件，**不要手动改 nginx 配置**。
 - **GitHub push protection 会拦密钥**：`web/src/lib/defaults.ts` 的 DeepSeek key 曾致 push 被拒，已通过 amend `87eaa44` 清除；真实密钥只放 `.env*`（已忽略），勿写进源码。
+- **生产语义索引当前不可用**：`database is not open`（PGlite）持续报错，章节后处理索引不更新、不影响出稿；排障时先看 `indexChapterSegments`（orchestrator 后处理段）。
 
 ---
 
-## 8. 当前 git 状态快照（2026-07-19 晚更新）
+## 8. 当前 git 状态快照（2026-07-19 深夜验收后更新）
 
-- `E:\ai\小说\character-arc-web`：HEAD 已推送 origin/feature/auto_mode_develop，本地不领先。近期提交线：`87eaa44`（全量同步，已 scrub 密钥）→ `270b260`（serverStreamTask 热修）→ `5e14988`（deploy.ps1 自动探测）→ `8a14b1b`（#1 重跑 UI）→ `459f17c`（收拢：server tsc 门禁）→ `2ed6cd1`（#2 大纲张力）→ `f8ce83f`（#5 失败章隔离区）→ `bf1cd59`（#3 写作日志聚合）→ `15d6a18`（#4 整卷复盘）。
-- **§6 遗留事项 5 项已全部完成**：#1 从指定章重跑、#2 批次间大纲张力检查、#3 写作日志结构化聚合、#4 整卷复盘、#5 失败章隔离区，均已上生产并验证。
-- 原 `C:\Users\maple\character-arc` 已删除（内容经树级比对确认全覆盖；`.codestable`、`data/users` 已迁入 E:）。
-- 生产服务器 `124.222.218.97` 运行正常，`https://124.222.218.97/character-arc/` 可访问，API 健康检查通过。
+- `E:\ai\小说\character-arc-web`：HEAD 已推送 origin/feature/auto_mode_develop，本地不领先。近期提交线：`87eaa44`（全量同步）→ `270b260`（热修）→ `8a14b1b`（#1 重跑）→ `459f17c`（收拢+server tsc 门禁）→ `2ed6cd1`（#2 大纲张力）→ `f8ce83f`（#5 隔离区）→ `bf1cd59`（#3 日志聚合）→ `15d6a18`（#4 整卷复盘）→ `470a73b`（验收修复：schema/间隔字段/status 刷新）→ `711a82d`（streamAiTask 白名单）。
+- **§6 遗留事项 5 项全部完成，并在真实验收 run（爆裂天神续写 1196-1203，共 8 章）中逐项验证生效**：
+  - run1（1196-1198）：#1 精确起跑、#3 坑 journal + memo 高频坑命中；1196 终检未过保草稿
+  - run2（1199-1201）：status 刷新修复生效（三章 review）
+  - run3（1202-1203）：#2 一致性检查首次真正触发（9 条跨章风险、quality_limit 自动暂停）、#4 volume-review 首次落库
+  - 验收中修复 4 个根因 bug（object-schema 缺失、zod 丢字段、status 刷新丢失、streamAiTask 白名单），详见 §7
+- 生产服务器 `124.222.218.97` 运行正常；爆裂天神项目当前 1195 正史 + 1196-1203 续写新章，1204-1205 空章待写。
+- 运维脚本（tools/prod-acc-*.mjs：inspect / seed-start / poll / verify / test-review / start-run）保留本地未跟踪，用法见各文件头注释。
 
-**下一步动作建议**：§6 已清空。新方向可从实际生产质量出发（如观察 outline-tension-check / quality-pitfalls 在真实 run 中的命中率再调参）；任何改动先跑双门禁（§4），提交推送后用 deploy.ps1 部署。
+**下一步动作建议**：§6 已清空。可观察项：语义索引 `database is not open`（PGlite）生产排障；quality-pitfalls 高频坑 Top 分布是否需调参；1196 章（终检未过）可用 #1 从指定章重跑重写。
